@@ -1,0 +1,448 @@
+{
+  "info": {
+    "name": "Tesla Fleet Rental API - Real Vehicle Test",
+    "description": "Complete Tesla Fleet API test collection for real vehicle commands",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://fleet-api.prd.na.vn.cloud.tesla.com/api/1"
+    },
+    {
+      "key": "auth_url", 
+      "value": "https://auth.tesla.com/oauth2/v3/token"
+    },
+    {
+      "key": "rental_api_url",
+      "value": "https://rentesla.xyz"
+    },
+    {
+      "key": "tesla_client_id",
+      "value": "1dbbfed2-ad60-4d78-946a-bac7fab420a8"
+    },
+    {
+      "key": "tesla_client_secret",
+      "value": "ta-secret.7CPosOop%gZtZ%5e"
+    },
+    {
+      "key": "tesla_token",
+      "value": ""
+    },
+    {
+      "key": "vehicle_id",
+      "value": ""
+    },
+    {
+      "key": "rental_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. 🔑 Get Tesla Fleet API Token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('tesla_token', response.access_token);",
+              "    console.log('Tesla token set:', response.access_token.substring(0, 20) + '...');",
+              "} else {",
+              "    console.log('Failed to get Tesla token');",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"grant_type\": \"client_credentials\",\n  \"client_id\": \"{{tesla_client_id}}\",\n  \"client_secret\": \"{{tesla_client_secret}}\",\n  \"scope\": \"openid email offline_access vehicle_device_data vehicle_commands vehicle_charging_cmds\"\n}"
+        },
+        "url": {
+          "raw": "{{auth_url}}",
+          "host": ["{{auth_url}}"]
+        },
+        "description": "Get Tesla Fleet API access token using client credentials"
+      }
+    },
+    {
+      "name": "2. 🚙 Get Vehicle List",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    if (response.response && response.response.length > 0) {",
+              "        pm.collectionVariables.set('vehicle_id', response.response[0].id);",
+              "        console.log('Vehicle ID set:', response.response[0].id);",
+              "        console.log('Vehicle name:', response.response[0].display_name);",
+              "        console.log('Vehicle state:', response.response[0].state);",
+              "    } else {",
+              "        console.log('No vehicles found. Please enroll your vehicle at: https://tesla.com/_ak/rentesla.xyz');",
+              "    }",
+              "} else {",
+              "    console.log('Failed to get vehicles');",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tesla_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/vehicles",
+          "host": ["{{base_url}}"],
+          "path": ["vehicles"]
+        },
+        "description": "Get list of vehicles associated with the Tesla account"
+      }
+    },
+    {
+      "name": "3. ⏰ Wake Up Vehicle",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tesla_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/vehicles/{{vehicle_id}}/wake_up",
+          "host": ["{{base_url}}"],
+          "path": ["vehicles", "{{vehicle_id}}", "wake_up"]
+        },
+        "description": "Wake up the vehicle (required before sending commands)"
+      }
+    },
+    {
+      "name": "4. 🔍 Check Vehicle State",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tesla_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/vehicles/{{vehicle_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["vehicles", "{{vehicle_id}}"]
+        },
+        "description": "Check current vehicle state and information"
+      }
+    },
+    {
+      "name": "5. 📯 Send Horn Command",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tesla_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/vehicles/{{vehicle_id}}/command/honk_horn",
+          "host": ["{{base_url}}"],
+          "path": ["vehicles", "{{vehicle_id}}", "command", "honk_horn"]
+        },
+        "description": "Send horn command to the vehicle"
+      }
+    },
+    {
+      "name": "6. 🔓 Unlock Doors",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tesla_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/vehicles/{{vehicle_id}}/command/door_unlock",
+          "host": ["{{base_url}}"],
+          "path": ["vehicles", "{{vehicle_id}}", "command", "door_unlock"]
+        },
+        "description": "Unlock vehicle doors"
+      }
+    },
+    {
+      "name": "7. 🔒 Lock Doors",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tesla_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/vehicles/{{vehicle_id}}/command/door_lock",
+          "host": ["{{base_url}}"],
+          "path": ["vehicles", "{{vehicle_id}}", "command", "door_lock"]
+        },
+        "description": "Lock vehicle doors"
+      }
+    },
+    {
+      "name": "8. 🌡️ Start Climate Control",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tesla_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/vehicles/{{vehicle_id}}/command/auto_conditioning_start",
+          "host": ["{{base_url}}"],
+          "path": ["vehicles", "{{vehicle_id}}", "command", "auto_conditioning_start"]
+        },
+        "description": "Start climate control system"
+      }
+    },
+    {
+      "name": "9. ❄️ Stop Climate Control",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tesla_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/vehicles/{{vehicle_id}}/command/auto_conditioning_stop",
+          "host": ["{{base_url}}"],
+          "path": ["vehicles", "{{vehicle_id}}", "command", "auto_conditioning_stop"]
+        },
+        "description": "Stop climate control system"
+      }
+    },
+    {
+      "name": "10. 🚪 Open Frunk",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tesla_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"which_trunk\": \"front\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/vehicles/{{vehicle_id}}/command/actuate_trunk",
+          "host": ["{{base_url}}"],
+          "path": ["vehicles", "{{vehicle_id}}", "command", "actuate_trunk"]
+        },
+        "description": "Open the front trunk (frunk)"
+      }
+    },
+    {
+      "name": "--- RENTAL API TESTS ---",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "",
+          "host": [""]
+        },
+        "description": "Separator for Rental API tests"
+      }
+    },
+    {
+      "name": "11. 🔑 Login to Rental API",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('rental_token', response.access_token);",
+              "    console.log('Rental token set');",
+              "} else {",
+              "    console.log('Failed to login to rental API');",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"postman_test_user\"\n}"
+        },
+        "url": {
+          "raw": "{{rental_api_url}}/login",
+          "host": ["{{rental_api_url}}"],
+          "path": ["login"]
+        },
+        "description": "Login to the rental API to get JWT token"
+      }
+    },
+    {
+      "name": "12. 🚗 Start Rental",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{rental_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"vehicle_id\": \"{{vehicle_id}}\",\n  \"duration\": 60\n}"
+        },
+        "url": {
+          "raw": "{{rental_api_url}}/rental/start",
+          "host": ["{{rental_api_url}}"],
+          "path": ["rental", "start"]
+        },
+        "description": "Start a rental session for the vehicle"
+      }
+    },
+    {
+      "name": "13. 📯 Send Horn via Rental API",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{rental_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"vehicle_id\": \"{{vehicle_id}}\",\n  \"command\": \"honk_horn\",\n  \"data\": {}\n}"
+        },
+        "url": {
+          "raw": "{{rental_api_url}}/vehicle/command",
+          "host": ["{{rental_api_url}}"],
+          "path": ["vehicle", "command"]
+        },
+        "description": "Send horn command through the rental API"
+      }
+    },
+    {
+      "name": "14. 📊 Check API Metrics",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{rental_api_url}}/metrics",
+          "host": ["{{rental_api_url}}"],
+          "path": ["metrics"]
+        },
+        "description": "Check rental API metrics and performance"
+      }
+    },
+    {
+      "name": "15. 🏥 Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{rental_api_url}}/health",
+          "host": ["{{rental_api_url}}"],
+          "path": ["health"]
+        },
+        "description": "Check rental API health status"
+      }
+    }
+  ]
+} 

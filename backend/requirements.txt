@@ -3,3 +3,4 @@ firebase-admin
 teslapy
 requests
 python-dotenv
+PyJWT

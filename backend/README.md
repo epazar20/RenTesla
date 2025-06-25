@@ -1,312 +1,316 @@
-# Tesla Rental Backend 🚗⚡
+# RenTesla Backend API
 
-Flask + Firebase + TeslaPy API ile araç kiralama backend'i.
+🚗 Tesla vehicle rental API with Firebase Authentication and TeslaPy integration.
 
-## 🚀 Özellikler
+## Features
 
-- **Tesla API Entegrasyonu**: TeslaPy kullanarak gerçek Tesla araç kontrolü
-- **Firebase Authentication**: Güvenli kullanıcı doğrulama
-- **Kiralama Sistemi**: Zamanlı araç kiralama yönetimi
-- **Environment Variables**: Güvenli konfigürasyon yönetimi
-- **Test & Production Modes**: Geliştirme ve üretim ayrımı
-- **RESTful API**: JSON tabanlı API endpoint'leri
+- 🔐 **Firebase Authentication** - JWT token based authentication
+- 🚗 **Tesla API Integration** - Complete Tesla vehicle control via TeslaPy
+- 📱 **RESTful API** - Clean REST endpoints for all operations
+- 🔒 **Secured Endpoints** - All API routes protected with JWT tokens
+- 📊 **Firestore Database** - Rental data storage in Firebase Firestore
+- 🧪 **Comprehensive Testing** - Complete test suite included
 
-## 📋 Gereksinimler
+## Quick Start
 
-- Python 3.8+
-- Tesla hesabı (gerçek araç kontrolü için)
-- Firebase projesi (üretim için)
+### 1. Setup Environment
 
-## 🛠️ Kurulum
-
-### 1. Virtual Environment Oluştur
 ```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# veya
-venv\Scripts\activate     # Windows
-```
-
-### 2. Paketleri Kur
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### 3. Environment Variables Ayarla
-```bash
-# .env dosyasını oluştur
+# Copy environment file
 cp env.example .env
 
-# .env dosyasını gerçek değerlerle düzenle
-TESLA_EMAIL=your-email@example.com
-TEST_MODE=False
-SECRET_KEY=your-secret-key-here
+# Update .env with your Tesla credentials
+TESLA_EMAIL=your-tesla-email@example.com
+FIREBASE_WEB_API_KEY=your-firebase-web-api-key
 ```
 
-### 4. Firebase Kurulumu (Üretim için)
-1. Firebase Console'dan `serviceAccountKey.json` dosyasını indirin
-2. Proje root'una yerleştirin
-3. `.env` dosyasında path'i ayarlayın
+### 2. Setup Firebase User
 
-### 5. Uygulamayı Başlat
+```bash
+# Create the test user in Firebase
+python setup_user.py
+```
+
+This creates a user with:
+- Email: `user@gmail.com`
+- Password: `Ep*2857088*`
+
+### 3. Start the API
+
 ```bash
 python app.py
 ```
 
-Server http://localhost:5001 adresinde çalışacak.
+The API will start on `http://localhost:5001`
 
-## 🧪 Test
+### 4. Test the API
 
-### Test Modu (Varsayılan)
 ```bash
-# .env dosyasında
-TEST_MODE=True
+# Run comprehensive tests
+python test_complete_api.py
 
-# Test scriptini çalıştır
-python test_api.py
+# Or test with custom URL
+python test_complete_api.py --url http://localhost:5001
 ```
 
-### Production Modu
-```bash
-# .env dosyasında
-TEST_MODE=False
+## Authentication Flow
 
-# Production test scriptini çalıştır
-python test_production_with_auth.py
+### 1. Login to get JWT token
+
+```bash
+curl -X POST http://localhost:5001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@gmail.com",
+    "password": "Ep*2857088*"
+  }'
 ```
 
-## 📱 API Endpoint'leri
-
-### Health Check
-```bash
-GET /health
-```
-**Response:**
+Response:
 ```json
 {
-  "status": "healthy",
-  "test_mode": false,
-  "firebase_connected": true,
-  "tesla_token_exists": true,
-  "tesla_email_configured": true
+  "message": "Login successful",
+  "id_token": "eyJhbGciOiJSUzI1NiIsIn...",
+  "refresh_token": "AMf-vBxYXm...",
+  "user_id": "firebase_user_id",
+  "email": "user@gmail.com",
+  "expires_in": "3600"
 }
 ```
 
-### Tesla Auth Init
+### 2. Use JWT token for API calls
+
 ```bash
-GET /auth/init
-```
-**Response:**
-```json
-{
-  "auth_url": "https://auth.tesla.com/oauth2/v3/authorize?...",
-  "message": "Visit this URL to authorize Tesla access"
-}
+curl -X GET http://localhost:5001/api/tesla/vehicles \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsIn..."
 ```
 
-### Tesla Auth Callback
+## API Endpoints
+
+### Authentication
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/login` | Login with email/password |
+| POST | `/auth/refresh` | Refresh JWT token |
+| GET | `/health` | API health check |
+
+### Tesla Vehicle Operations (Protected)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tesla/vehicles` | List all vehicles |
+| GET | `/api/tesla/vehicle/{id}/data` | Get full vehicle data |
+| GET | `/api/tesla/vehicle/{id}/summary` | Get vehicle summary |
+| GET | `/api/tesla/vehicle/{id}/location` | Get vehicle location |
+
+### Vehicle Commands (Protected)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/vehicle/command` | Send command to vehicle |
+
+### Rental Operations (Protected)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/rent` | Start a rental |
+| GET | `/api/rent/status` | Get current rental status |
+| POST | `/api/rent/end` | End current rental |
+
+## Example Usage
+
+### Login and Get Vehicles
+
+```python
+import requests
+
+# Login
+login_response = requests.post('http://localhost:5001/auth/login', json={
+    'email': 'user@gmail.com',
+    'password': 'Ep*2857088*'
+})
+
+token = login_response.json()['id_token']
+
+# Get vehicles
+vehicles_response = requests.get(
+    'http://localhost:5001/api/tesla/vehicles',
+    headers={'Authorization': f'Bearer {token}'}
+)
+
+vehicles = vehicles_response.json()['vehicles']
+print(f"Found {len(vehicles)} vehicles")
+```
+
+### Start a Rental
+
+```python
+# Start rental
+rental_response = requests.post(
+    'http://localhost:5001/api/rent',
+    headers={'Authorization': f'Bearer {token}'},
+    json={
+        'vehicle_id': vehicles[0]['id'],
+        'duration_hours': 2
+    }
+)
+
+rental_info = rental_response.json()
+print(f"Rental started: {rental_info['rent_info']['rent_id']}")
+```
+
+## Security Features
+
+- 🔐 **JWT Token Authentication** - All API endpoints protected
+- 🔥 **Firebase Auth Integration** - Secure user management
+- 🛡️ **Token Validation** - Automatic token verification
+- ⏰ **Token Refresh** - Seamless token renewal
+- 🚫 **Unauthorized Access Blocking** - 401/403 responses for invalid tokens
+
+## Testing
+
+The project includes comprehensive test coverage:
+
 ```bash
-GET /auth/callback?url=<redirect_url>
-```
-**Response:**
-```json
-{
-  "message": "Tesla token successfully obtained and saved"
-}
+# Run all tests
+python test_complete_api.py
+
+# Test specific scenarios
+python test_complete_api.py --email user@gmail.com --password Ep*2857088*
 ```
 
-### Kiralama Başlat
-```bash
-POST /api/rent
-Authorization: Bearer <firebase_token>
-Content-Type: application/json
+Test coverage includes:
+- ✅ Authentication flow
+- ✅ Token refresh
+- ✅ Unauthorized access blocking
+- ✅ Tesla vehicle operations
+- ✅ Rental operations
+- ✅ Vehicle commands
 
-{
-  "duration": 60  # dakika (opsiyonel, varsayılan: 30)
-}
-```
-**Response:**
-```json
-{
-  "status": "Rent started",
-  "valid_until": "2025-06-03T20:52:23.266743",
-  "allowed_commands": ["unlock", "lock", "honk_horn"]
-}
-```
-
-### Kiralama Durumu
-```bash
-GET /api/rent/status
-Authorization: Bearer <firebase_token>
-```
-**Response:**
-```json
-{
-  "active_rent": true,
-  "current_time": "2025-06-03T19:52:23.268167",
-  "rent_info": {
-    "user_id": "test-user",
-    "start_time": "2025-06-03T19:52:23.266743",
-    "end_time": "2025-06-03T20:52:23.266743",
-    "allowed_commands": ["unlock", "lock", "honk_horn"],
-    "test_mode": false
-  }
-}
-```
-
-### Araç Komutu Gönder
-```bash
-POST /api/vehicle/command
-Authorization: Bearer <firebase_token>
-Content-Type: application/json
-
-{
-  "command": "unlock"  # unlock, lock, honk_horn
-}
-```
-**Response:**
-```json
-{
-  "status": "unlock sent",
-  "test_mode": false
-}
-```
-
-## 🔧 Environment Variables
-
-| Variable | Açıklama | Varsayılan |
-|----------|----------|------------|
-| `TESLA_EMAIL` | Tesla hesap email'i | `your-email@example.com` |
-| `TEST_MODE` | Test modu (true/false) | `False` |
-| `PORT` | Sunucu portu | `5001` |
-| `HOST` | Sunucu host'u | `0.0.0.0` |
-| `DEBUG` | Debug modu (true/false) | `True` |
-| `SECRET_KEY` | Flask secret key | `dev-secret-key-change-in-production` |
-| `FIREBASE_SERVICE_ACCOUNT_PATH` | Firebase servis anahtarı path'i | `serviceAccountKey.json` |
-
-## 📁 Proje Yapısı
-
-```
-backend/
-├── app.py                          # Ana Flask uygulaması
-├── test_api.py                     # Test modu API testleri
-├── test_production_with_auth.py    # Production modu API testleri
-├── requirements.txt                # Python bağımlılıkları
-├── README.md                       # Bu dosya
-├── .env                           # Environment variables (GİT'E EKLEMEYİN!)
-├── env.example                    # Environment variables örneği
-├── .gitignore                     # Git ignore kuralları
-├── token.json                     # Tesla API token'ı (otomatik oluşur)
-├── serviceAccountKey.json         # Firebase servis anahtarı (GİT'E EKLEMEYİN!)
-├── venv/                         # Virtual environment
-└── rents/                        # Kiralama dosyaları
-    └── {user_id}.json           # Kullanıcı kiralama verileri
-```
-
-## 🔒 Güvenlik
-
-### Dosya Güvenliği
-- **`.env`**: Environment variables (gitignore'da)
-- **`serviceAccountKey.json`**: Firebase anahtarı (gitignore'da)
-- **`token.json`**: Tesla token'ı (gitignore'da)
-- **`rents/`**: Kullanıcı verileri (gitignore'da)
-
-### API Güvenliği
-- **Firebase Authentication**: Production modunda gerçek token doğrulama
-- **Test Mode**: Geliştirme için auth bypass
-- **Zaman Sınırları**: Kiralama süre kontrolü
-- **Komut Sınırları**: Sadece izin verilen Tesla komutları
-- **Kullanıcı İzolasyonu**: Her kullanıcının kendi kiralama verisi
-
-## 🐛 Hata Ayıklama
-
-### Port Çakışması
-macOS'ta AirPlay Receiver 5000 portunu kullanıyor:
-```bash
-# System Preferences -> General -> AirDrop & Handoff
-# AirPlay Receiver'ı kapatın veya .env'de PORT=5001 kullanın
-```
+## Configuration
 
 ### Environment Variables
-```bash
-# .env dosyasını kontrol edin
-cat .env
 
-# Eksik variables için
-cp env.example .env
-# ve gerçek değerlerinizi girin
-```
+Create a `.env` file:
 
-### Firebase Hataları
-Test modu için:
-```bash
-# .env dosyasında
-TEST_MODE=True
-```
-
-### Tesla API Hataları
-- Tesla hesabınızın aktif olduğundan emin olun
-- API rate limit'lerine dikkat edin
-- Araç uyku modunda olabilir (wake-up gerekebilir)
-- TeslaPy 2.9.0+ kullandığınızdan emin olun
-
-## 📊 Test Sonuçları
-
-### Test Mode
-```
-🎯 Overall: 6/6 tests passed (100.0%)
-🎉 All tests passed! Backend is working correctly.
-```
-
-### Production Mode
-```
-🎯 Overall: 3/4 tests passed (75.0%)
-⚠️  Mock Firebase token expected to fail
-```
-
-## 🚀 Production Deployment
-
-### 1. Environment Setup
-```bash
-# Production .env
+```env
+# Tesla API
+TESLA_EMAIL=your-tesla-email@example.com
 TEST_MODE=False
-DEBUG=False
-SECRET_KEY=your-production-secret-key
+
+# Flask
+SECRET_KEY=your-secret-key
+DEBUG=True
+HOST=0.0.0.0
+PORT=5001
+
+# Firebase
+FIREBASE_SERVICE_ACCOUNT_PATH=serviceAccountKey.json
+FIREBASE_WEB_API_KEY=your-firebase-web-api-key
 ```
 
-### 2. Firebase Setup
-- Gerçek Firebase projesi oluşturun
-- `serviceAccountKey.json` dosyasını indirin
-- Firebase Console'da authentication'ı aktive edin
+### Firebase Setup
 
-### 3. Tesla Setup
-- Tesla hesabınızın email'ini `.env`'de ayarlayın
-- `/auth/init` endpoint'ini ziyaret edin
-- Tesla yetkilendirmesini tamamlayın
+1. Download `serviceAccountKey.json` from Firebase Console
+2. Place it in the backend directory
+3. Update `FIREBASE_WEB_API_KEY` in environment
 
-### 4. Production Server
-```bash
-# Production WSGI server kullanın
-gunicorn -w 4 -b 0.0.0.0:5001 app:app
+## Production Deployment
+
+### Security Checklist
+
+- [ ] Change `SECRET_KEY` to a strong random value
+- [ ] Set `DEBUG=False`
+- [ ] Use environment variables for sensitive data
+- [ ] Enable HTTPS
+- [ ] Restrict CORS origins
+- [ ] Set up proper logging
+- [ ] Configure rate limiting
+
+### Docker Deployment
+
+```dockerfile
+FROM python:3.9-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+
+EXPOSE 5001
+CMD ["python", "app.py"]
 ```
 
-## 🤝 Katkıda Bulunma
+## Troubleshooting
 
-1. Fork yapın
-2. Feature branch oluşturun: `git checkout -b feature/amazing-feature`
-3. Değişikliklerinizi commit edin: `git commit -m 'Add amazing feature'`
-4. Branch'i push edin: `git push origin feature/amazing-feature`
-5. Pull request açın
+### Common Issues
 
-## 📄 Lisans
+1. **Firebase Connection Failed**
+   - Check `serviceAccountKey.json` exists
+   - Verify Firebase project ID matches
 
-MIT License - detaylar için LICENSE dosyasına bakın.
+2. **Tesla API Errors**
+   - Ensure Tesla email is configured
+   - Check Tesla account has vehicle access
 
----
+3. **Authentication Errors**
+   - Verify user exists in Firebase
+   - Check token expiration
+   - Validate Firebase Web API key
 
-**⚠️ Güvenlik Uyarısı**: Bu proje eğitim/demo amaçlıdır. Gerçek üretim kullanımı için:
-- Güçlü secret key kullanın
-- HTTPS kullanın
-- Rate limiting ekleyin
-- Log monitoring yapın
-- Regular security audit'leri yapın
+### Debug Mode
+
+Set `DEBUG=True` in environment for detailed error logs.
+
+## API Response Examples
+
+### Vehicle List Response
+
+```json
+{
+  "vehicles": [
+    {
+      "id": "123456789",
+      "display_name": "My Tesla",
+      "state": "online",
+      "vin": "5YJ3E1EA1KF123456"
+    }
+  ],
+  "count": 1,
+  "success": true
+}
+```
+
+### Rental Start Response
+
+```json
+{
+  "message": "Rent started successfully",
+  "rent_info": {
+    "rent_id": "rent_123",
+    "vehicle_id": "123456789",
+    "user_id": "firebase_user_id",
+    "status": "active",
+    "started_at": "2024-01-15T10:30:00Z",
+    "duration_hours": 2
+  },
+  "success": true
+}
+```
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Support
+
+For issues and questions:
+1. Check this README
+2. Run the test suite
+3. Check Firebase Console for auth issues
+4. Verify Tesla API credentials
