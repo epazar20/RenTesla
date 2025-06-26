@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  tesla-api:
+    build: .
+    container_name: tesla-info-api
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    volumes:
+      # Mount for persistent data (optional)
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tesla-network
+
+  # Optional: PostgreSQL database (if you want to run DB in container too)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: tesla-postgres
+  #   environment:
+  #     POSTGRES_DB: tesla_db
+  #     POSTGRES_USER: tesla_user
+  #     POSTGRES_PASSWORD: tesla_password
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - tesla-network
+
+networks:
+  tesla-network:
+    driver: bridge
+
+# volumes:
+#   postgres_data: 
