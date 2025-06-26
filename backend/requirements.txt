@@ -1,8 +1,0 @@
-flask
-teslapy
-requests
-python-dotenv
-PyJWT
-psycopg2-binary
-schedule
-pytz
