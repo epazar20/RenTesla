@@ -1,879 +1,241 @@
-from flask import Flask, request, jsonify
-from functools import wraps
+from flask import Flask, request, jsonify, redirect, session
 import teslapy
 import os
 import json
+import secrets
+import hashlib
+import base64
+import urllib.parse
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-import firebase_admin
-from firebase_admin import credentials, auth as firebase_auth, firestore
-from urllib.parse import urlparse, parse_qs
-from auth_service import AuthService
-import subprocess
+from database import (
+    init_db_pool, test_connection, create_tables, cleanup_expired_sessions,
+    save_auth_session, get_auth_session, delete_auth_session,
+    save_vehicle_data, get_latest_vehicle_data,
+    save_tesla_token, get_tesla_token, clear_tesla_token_cache,
+    save_vehicle_info, get_all_vehicles, save_vehicle_location, get_latest_vehicle_location,
+    get_recent_sync_logs, get_vehicle_update_logs, get_vehicle_update_summary,
+    convert_to_turkey_time, CustomJSONEncoder, async_save_update_log
+)
+import time
+import pytz
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder for datetime objects"""
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super(DateTimeEncoder, self).default(obj)
 
 # Load environment variables
 load_dotenv()
 
-# Config from environment variables
-TOKEN_FILE = 'token.json'
-RENT_DIR = 'rents'
 EMAIL = os.getenv('TESLA_EMAIL', 'your-email@example.com')
-TEST_MODE = os.getenv('TEST_MODE', 'False').lower() == 'true'
 PORT = int(os.getenv('PORT', 5001))
 HOST = os.getenv('HOST', '0.0.0.0')
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
-FIREBASE_SERVICE_ACCOUNT_PATH = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH', 'serviceAccountKey.json')
-FIREBASE_WEB_API_KEY = os.getenv('FIREBASE_WEB_API_KEY', 'AIzaSyB8v4_sY7CKoT6_jJ1bE9Y6bKQYFw6o8EY')
 
-# Tesla Vehicle Command Configuration
-TESLA_VEHICLE_COMMAND_ENABLED = os.getenv('TESLA_VEHICLE_COMMAND_ENABLED', 'false').lower() == 'true'
-TESLA_PRIVATE_KEY_PATH = os.getenv('TESLA_PRIVATE_KEY_PATH', './tesla_private.pem')
-TESLA_GO_TOOL_PATH = os.getenv('TESLA_GO_TOOL_PATH', './tesla-control')
-TESLA_COMMAND_METHOD = os.getenv('TESLA_COMMAND_METHOD', 'internet')  # internet, ble, proxy
+# Tesla OAuth URLs
+TESLA_AUTH_URL = os.getenv('TESLA_AUTH_URL', 'https://auth.tesla.com/oauth2/v3/authorize')
+TESLA_CALLBACK_URL = os.getenv('TESLA_CALLBACK_URL', 'https://auth.tesla.com/void/callback')
 
-if not os.path.exists(RENT_DIR):
-    os.makedirs(RENT_DIR)
-
-# Firebase setup with error handling
-firebase_connected = False
-firestore_db = None
-try:
-    if not firebase_admin._apps:
-        if os.path.exists(FIREBASE_SERVICE_ACCOUNT_PATH):
-            cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
-            firebase_admin.initialize_app(cred)
-            firestore_db = firestore.client()
-            firebase_connected = True
-            print("✅ Firebase initialized successfully")
-            print("✅ Firestore client initialized")
-        else:
-            print(f"⚠️  {FIREBASE_SERVICE_ACCOUNT_PATH} not found - Firebase auth disabled")
-            TEST_MODE = True
-except Exception as e:
-    print(f"⚠️  Firebase initialization failed: {e}")
-    firebase_connected = False
-
-# Initialize AuthService AFTER Firebase Admin SDK
-auth_service = AuthService(FIREBASE_WEB_API_KEY)
-
-# App setup
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
+app.json_encoder = DateTimeEncoder
 
-print(f"🚀 Starting app in {'TEST' if TEST_MODE else 'PRODUCTION'} mode")
-if not TEST_MODE and EMAIL == 'your-email@example.com':
-    print("⚠️  WARNING: Please set TESLA_EMAIL environment variable!")
+# Initialize database
+print("🔄 Initializing database...")
+if not init_db_pool():
+    print("❌ Database initialization failed!")
+    exit(1)
+
+if not test_connection():
+    print("❌ Database connection test failed!")
+    exit(1)
+
+print("🏗️ Creating database tables...")
+if not create_tables():
+    print("❌ Table creation failed!")
+    exit(1)
+
+print("🧹 Cleaning up expired sessions...")
+cleanup_expired_sessions()
 
 # Utils: Token storage
 
-def load_token():
-    if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, 'r') as f:
-            return json.load(f)
-    return None
-
-def save_token(token_dict):
-    with open(TOKEN_FILE, 'w') as f:
-        json.dump(token_dict, f)
-
-# Tesla staged auth state management
-auth_sessions = {}
-
-def get_tesla_instance():
-    """Get Tesla instance with error handling"""
+def get_tesla_instance(email=None):
+    """Get Tesla instance with token from database"""
+    if not email:
+        email = EMAIL
+    
     try:
-        token = load_token()
-        tesla = teslapy.Tesla(EMAIL, token=token)
+        # Get token from database
+        token = get_tesla_token(email)
+        if not token:
+            print(f"❌ No valid token found for {email}")
+            return None
+            
+        tesla = teslapy.Tesla(email, token=token)
+        
+        # Try to refresh token if needed
         if tesla.refresh_token():
-            save_token(tesla.token)
+            # Save updated token back to database
+            save_tesla_token(email, tesla.token)
+            
         return tesla
     except Exception as e:
         print(f"❌ Tesla connection error: {e}")
         return None
 
-# Middleware: Firebase auth
-
-def verify_token(id_token):
-    if TEST_MODE:
-        # Test mode - bypass Firebase auth
-        return {"uid": "test-user", "email": "test@example.com"}
-    
-    if not firebase_connected:
-        print("❌ Firebase not connected, falling back to test mode")
-        return {"uid": "test-user", "email": "test@example.com"}
-    
-    return auth_service.verify_id_token(id_token)
-
-def require_auth(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if TEST_MODE:
-            # Test mode - create mock user
-            request.user = {"uid": "test-user", "email": "test@example.com"}
-            return f(*args, **kwargs)
-            
-        auth_header = request.headers.get('Authorization', '')
-        if not auth_header.startswith("Bearer "):
-            return jsonify({"error": "No token provided"}), 401
-
-        token = auth_header.split(" ")[1]
-        
-        user = verify_token(token)
-        if not user:
-            return jsonify({"error": "Invalid token"}), 403
-
-        request.user = user
-        return f(*args, **kwargs)
-    return wrapper
-
-# Health check endpoint
 @app.route('/health', methods=['GET'])
 def health_check():
-    tesla_command_check = check_tesla_command_prerequisites()
-    
+    token_exists = get_tesla_token(EMAIL) is not None
     status = {
         "status": "healthy",
-        "test_mode": TEST_MODE,
-        "firebase_connected": firebase_connected,
-        "tesla_token_exists": os.path.exists(TOKEN_FILE),
+        "tesla_token_exists": token_exists,
         "tesla_email_configured": EMAIL != 'your-email@example.com',
-        "tesla_vehicle_command": {
-            "enabled": TESLA_VEHICLE_COMMAND_ENABLED,
-            "ready": tesla_command_check["ready"],
-            "method": TESLA_COMMAND_METHOD,
-            "details": tesla_command_check
-        }
     }
     return jsonify(status)
 
-# NEW: Login endpoint
-@app.route('/auth/login', methods=['POST'])
-def login():
-    """Email ve password ile login olup JWT token döner"""
-    data = request.json or {}
-    email = data.get('email')
-    password = data.get('password')
-    
-    if not email or not password:
-        return jsonify({"error": "Email and password required"}), 400
-    
-    # Firebase auth ile giriş yap
-    auth_result = auth_service.sign_in_with_email_password(email, password)
-    
-    if auth_result:
-        return jsonify({
-            "message": "Login successful",
-            "id_token": auth_result["id_token"],
-            "refresh_token": auth_result["refresh_token"],
-            "user_id": auth_result["user_id"],
-            "email": auth_result.get("email", email),
-            "expires_in": auth_result["expires_in"]
-        })
-    else:
-        return jsonify({"error": "Invalid credentials"}), 401
-
-# NEW: Refresh token endpoint
-@app.route('/auth/refresh', methods=['POST'])
-def refresh_token():
-    """Refresh token ile yeni ID token alır"""
-    data = request.json or {}
-    refresh_token = data.get('refresh_token')
-    
-    if not refresh_token:
-        return jsonify({"error": "Refresh token required"}), 400
-    
-    auth_result = auth_service.refresh_id_token(refresh_token)
-    
-    if auth_result:
-        return jsonify({
-            "message": "Token refreshed successfully",
-            "id_token": auth_result["id_token"],
-            "refresh_token": auth_result["refresh_token"],
-            "user_id": auth_result["user_id"],
-            "expires_in": auth_result["expires_in"]
-        })
-    else:
-        return jsonify({"error": "Invalid refresh token"}), 401
-
-# Endpoint: Firebase Authentication (Create Custom Token)
-@app.route('/auth/firebase', methods=['POST'])
-def firebase_auth():
-    """Create Firebase custom token for testing purposes"""
-    if TEST_MODE:
-        # Test mode - return mock JWT token
-        return jsonify({
-            "token": "mock-jwt-token-for-testing",
-            "uid": "test-user",
-            "email": "test@example.com",
-            "message": "Mock JWT token created (TEST MODE)"
-        })
-    
-    if not firebase_connected:
-        return jsonify({"error": "Firebase not connected"}), 500
-    
-    data = request.json or {}
-    uid = data.get('uid', 'user-test')
-    email = data.get('email', 'user@gmail.com')
-    
-    try:
-        # Create custom token for the user
-        custom_token = firebase_auth.create_custom_token(uid, {
-            'email': email,
-            'role': 'user'
-        })
-        
-        # If user doesn't exist, create it
-        try:
-            firebase_auth.get_user(uid)
-        except firebase_auth.UserNotFoundError:
-            firebase_auth.create_user(
-                uid=uid,
-                email=email,
-                email_verified=True
-            )
-            print(f"✅ Created new user: {uid} ({email})")
-        
-        print(f"🔐 Custom token created for user: {uid}")
-        
-        return jsonify({
-            "custom_token": custom_token.decode('utf-8'),
-            "uid": uid,
-            "email": email,
-            "message": "Custom token created successfully",
-            "note": "Use this custom_token to sign in with Firebase Auth SDK to get ID token"
-        })
-        
-    except Exception as e:
-        print(f"❌ Firebase auth failed: {str(e)}")
-        return jsonify({"error": f"Firebase auth failed: {str(e)}"}), 500
-
-# Endpoint: Create ID Token from Custom Token (for testing)
-@app.route('/auth/id-token', methods=['POST'])
-def create_id_token():
-    """Create ID token from custom token for testing"""
-    data = request.json or {}
-    uid = data.get('uid', 'user-test')
-    email = data.get('email', 'user@gmail.com')
-    
-    if TEST_MODE:
-        return jsonify({
-            "id_token": "mock-id-token-for-testing",
-            "uid": uid,
-            "email": email,
-            "message": "Mock ID token created (TEST MODE)"
-        })
-    
-    if not firebase_connected:
-        return jsonify({"error": "Firebase not connected"}), 500
-    
-    try:
-        # Create custom claims for the token
-        custom_claims = {
-            'email': email,
-            'role': 'user'
-        }
-        
-        # Ensure user exists, create if not
-        try:
-            firebase_auth.get_user(uid)
-        except firebase_auth.UserNotFoundError:
-            firebase_auth.create_user(
-                uid=uid,
-                email=email,
-                email_verified=True
-            )
-            print(f"✅ Created new user: {uid} ({email})")
-        
-        # Set custom claims for user
-        firebase_auth.set_custom_user_claims(uid, custom_claims)
-        
-        # Create custom token
-        custom_token = firebase_auth.create_custom_token(uid, custom_claims)
-        
-        # For testing purposes, we'll create a mock ID token
-        # In real app, client would use this custom_token to get ID token
-        mock_id_token = f"test-id-token-{uid}-{email.replace('@', '-at-')}-{int(datetime.utcnow().timestamp())}"
-        
-        return jsonify({
-            "id_token": mock_id_token,
-            "custom_token": custom_token.decode('utf-8'),
-            "uid": uid,
-            "email": email,
-            "message": "Test ID token created successfully"
-        })
-        
-    except Exception as e:
-        print(f"❌ ID token creation failed: {str(e)}")
-        return jsonify({"error": f"ID token creation failed: {str(e)}"}), 500
-
-# Endpoint: Tesla Auth init
-@app.route('/auth/init', methods=['GET'])
+@app.route('/auth/init', methods=['POST'])
 def init_auth():
-    if TEST_MODE:
-        # Test mode - return mock auth URL
-        return jsonify({
-            "auth_url": "https://auth.tesla.com/oauth2/v3/authorize?mock=true", 
-            "message": "Visit this URL to authorize Tesla access (TEST MODE)"
-        })
-    
-    if EMAIL == 'your-email@example.com':
-        return jsonify({"error": "TESLA_EMAIL environment variable not configured"}), 500
-    
+    """Initialize Tesla OAuth authentication"""
     try:
-        # Staged authorization - Generate state and code_verifier
-        # Create Tesla instance without cache to avoid authorized state issue
-        tesla = teslapy.Tesla(EMAIL, cache_loader=lambda: {}, cache_dumper=lambda x: None)
-        state = tesla.new_state()
-        code_verifier = tesla.new_code_verifier()
+        data = request.get_json()
+        email = data.get('email')
         
-        # Store session data
-        session_id = f"{state}_{code_verifier[:10]}"
-        auth_sessions[session_id] = {
-            "state": state,
-            "code_verifier": code_verifier,
-            "email": EMAIL,
-            "created_at": datetime.utcnow().isoformat()
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        
+        # Generate state and code_verifier
+        state = secrets.token_urlsafe(32)
+        code_verifier = secrets.token_urlsafe(32)
+        session_id = secrets.token_urlsafe(16)
+        
+        # Save session to database
+        if not save_auth_session(session_id, state, code_verifier, email):
+            return jsonify({'error': 'Failed to save auth session'}), 500
+        
+        # Generate code_challenge
+        code_challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(code_verifier.encode()).digest()
+        ).decode().rstrip('=')
+        
+        # Build authorization URL
+        auth_url = TESLA_AUTH_URL
+        params = {
+            'client_id': 'ownerapi',
+            'code_challenge': code_challenge,
+            'code_challenge_method': 'S256',
+            'redirect_uri': TESLA_CALLBACK_URL,
+            'response_type': 'code',
+            'scope': 'openid email offline_access',
+            'state': state,
+            'login_hint': email
         }
         
-        # Generate auth URL with state and code_verifier
-        auth_url = tesla.authorization_url(state=state, code_verifier=code_verifier)
-        
-        print(f"🔐 Auth session created: {session_id}")
-        print(f"🔗 Auth URL: {auth_url}")
+        full_auth_url = f"{auth_url}?{urllib.parse.urlencode(params)}"
         
         return jsonify({
-            "auth_url": auth_url, 
-            "session_id": session_id,
-            "state": state,
-            "message": "Visit this URL to authorize Tesla access"
+            'auth_url': full_auth_url,
+            'state': state,
+            'session_id': session_id
         })
+        
     except Exception as e:
-        print(f"❌ Tesla auth initialization failed: {str(e)}")
-        return jsonify({"error": f"Tesla auth initialization failed: {str(e)}"}), 500
+        print(f"❌ Auth init error: {e}")
+        return jsonify({'error': str(e)}), 500
 
-# Endpoint: Clear Tesla Auth Token
 @app.route('/auth/clear', methods=['POST'])
 def clear_auth():
-    """Clear Tesla authentication token to force re-authentication"""
     try:
-        if os.path.exists(TOKEN_FILE):
-            os.remove(TOKEN_FILE)
-            print(f"🗑️ Removed token file: {TOKEN_FILE}")
-            return jsonify({
-                "message": "Tesla token cleared successfully",
-                "success": True
-            })
-        else:
-            return jsonify({
-                "message": "No token file found to clear",
-                "success": True
-            })
+        # Clear token from database and cache
+        clear_tesla_token_cache()
+        
+        # Remove token.json if exists
+        if os.path.exists('token.json'):
+            os.remove('token.json')
+            
+        return jsonify({"message": "Tesla token cleared successfully", "success": True})
     except Exception as e:
         print(f"❌ Token clear failed: {str(e)}")
         return jsonify({"error": f"Token clear failed: {str(e)}"}), 500
 
-# Endpoint: Tesla Auth callback
-@app.route('/auth/callback', methods=['GET', 'POST'])
+@app.route('/auth/callback', methods=['POST'])
 def auth_callback():
-    if request.method == 'GET':
-        # GET request - URL parametresi ile callback
-        redirect_url = request.args.get('url')
-    else:
-        # POST request - JSON body ile callback
-        data = request.json or {}
-        redirect_url = data.get('url')
-    
-    # Debug: Gelen URL'yi kontrol et
-    print(f"🔍 DEBUG: Received redirect_url: {redirect_url}")
-    print(f"🔍 DEBUG: All request args: {dict(request.args)}")
-    
-    if not redirect_url:
-        return jsonify({
-            "error": "URL parameter required", 
-            "help": "Copy the full URL from the 'Page Not Found' browser page and send it as 'url' parameter"
-        }), 400
-
-    if TEST_MODE:
-        # Test mode - simulate token save
-        mock_token = {
-            "access_token": "mock_access_token",
-            "refresh_token": "mock_refresh_token",
-            "created_at": datetime.utcnow().isoformat()
-        }
-        save_token(mock_token)
-        return jsonify({"message": "Tesla token successfully obtained and saved (TEST MODE)"})
-
+    """Handle Tesla OAuth callback"""
     try:
-        # Extract state from callback URL to find session
-        parsed_url = urlparse(redirect_url)
-        query_params = parse_qs(parsed_url.query)
-        state_from_url = query_params.get('state', [None])[0]
+        data = request.get_json()
+        callback_url = data.get('callback_url')
         
-        # Debug: URL parsing detayları
-        print(f"🔍 DEBUG: Parsed URL: {parsed_url}")
-        print(f"🔍 DEBUG: Query params: {query_params}")
-        print(f"🔍 DEBUG: State from URL: {state_from_url}")
-        print(f"🔍 DEBUG: Available sessions: {list(auth_sessions.keys())}")
+        if not callback_url:
+            return jsonify({'error': 'Callback URL is required'}), 400
         
-        if not state_from_url:
-            return jsonify({
-                "error": "No state parameter found in callback URL",
-                "debug": {
-                    "received_url": redirect_url,
-                    "parsed_query": query_params
-                }
-            }), 400
+        # Parse callback URL
+        parsed_url = urllib.parse.urlparse(callback_url)
+        query_params = urllib.parse.parse_qs(parsed_url.query)
         
-        # Find matching session
-        session_data = None
-        session_id_to_remove = None
-        for session_id, session in auth_sessions.items():
-            print(f"🔍 DEBUG: Checking session {session_id}, state: {session['state']}")
-            if session['state'] == state_from_url:
-                session_data = session
-                session_id_to_remove = session_id
-                break
+        code = query_params.get('code', [None])[0]
+        state = query_params.get('state', [None])[0]
         
+        if not code or not state:
+            return jsonify({'error': 'Missing code or state parameter'}), 400
+        
+        # Get session from database
+        session_data = get_auth_session(state)
         if not session_data:
-            return jsonify({
-                "error": "Invalid or expired session. Please restart authentication.",
-                "debug": {
-                    "state_from_url": state_from_url,
-                    "available_states": [s['state'] for s in auth_sessions.values()]
-                }
-            }), 400
+            return jsonify({'error': 'Invalid or expired session'}), 400
         
-        # Use staged authorization with stored state and code_verifier
-        tesla = teslapy.Tesla(EMAIL, state=session_data['state'], code_verifier=session_data['code_verifier'])
-        tesla.fetch_token(authorization_response=redirect_url)
-        save_token(tesla.token)
+        # Extract session data
+        session_id = session_data['session_id']
+        code_verifier = session_data['code_verifier']
+        email = session_data['email']
         
-        # Clean up session
-        auth_sessions.pop(session_id_to_remove, None)
-        
-        print(f"✅ Tesla token successfully saved!")
-        print(f"📝 Token saved to: {TOKEN_FILE}")
-        
-        return jsonify({
-            "message": "Tesla token successfully obtained and saved", 
-            "token_file": TOKEN_FILE,
-            "success": True
-        })
-    except Exception as e:
-        print(f"❌ Token fetch failed: {str(e)}")
-        return jsonify({"error": f"Token fetch failed: {str(e)}"}), 500
-
-# Endpoint: Manual Token Input (yeni endpoint)
-@app.route('/auth/manual', methods=['POST'])
-def manual_auth():
-    """Manuel token input için endpoint"""
-    data = request.json or {}
-    callback_url = data.get('callback_url')
-    
-    if not callback_url:
-        return jsonify({
-            "error": "callback_url is required",
-            "help": "Send the full URL from browser (starting with https://auth.tesla.com/void/callback?code=...)"
-        }), 400
-        
-    if TEST_MODE:
-        mock_token = {
-            "access_token": "mock_access_token", 
-            "refresh_token": "mock_refresh_token",
-            "created_at": datetime.utcnow().isoformat()
-        }
-        save_token(mock_token)
-        return jsonify({"message": "Mock token saved (TEST MODE)", "success": True})
-    
-    try:
-        # Extract state from callback URL to find session
-        parsed_url = urlparse(callback_url)
-        query_params = parse_qs(parsed_url.query)
-        state_from_url = query_params.get('state', [None])[0]
-        
-        if not state_from_url:
-            return jsonify({"error": "No state parameter found in callback URL"}), 400
-        
-        # Find matching session
-        session_data = None
-        session_id_to_remove = None
-        for session_id, session in auth_sessions.items():
-            if session['state'] == state_from_url:
-                session_data = session
-                session_id_to_remove = session_id
-                break
-        
-        if not session_data:
-            return jsonify({
-                "error": "Invalid or expired session. Please restart authentication.",
-                "help": "Call /auth/init first to get a new auth URL"
-            }), 400
-        
-        # Use staged authorization with stored state and code_verifier
-        tesla = teslapy.Tesla(EMAIL, state=session_data['state'], code_verifier=session_data['code_verifier'])
-        tesla.fetch_token(authorization_response=callback_url)
-        save_token(tesla.token)
-        
-        # Clean up session
-        auth_sessions.pop(session_id_to_remove, None)
-        
-        print(f"✅ Tesla token successfully obtained and saved!")
-        print(f"📝 Token details: {tesla.token}")
-        
-        response_data = {
-            "message": "Tesla token successfully obtained and saved",
-            "token_file": TOKEN_FILE,
-            "success": True,
-            "token_info": {
-                "has_access_token": "access_token" in tesla.token,
-                "has_refresh_token": "refresh_token" in tesla.token,
-                "created_at": tesla.token.get("created_at")
-            }
-        }
-        return jsonify(response_data)
-    except Exception as e:
-        print(f"❌ Manual token fetch failed: {str(e)}")
-        return jsonify({"error": f"Manual token fetch failed: {str(e)}", "success": False}), 500
-
-# Firestore helper functions
-def save_rent_to_firestore(user_id, rent_info):
-    """Save rent info to Firestore"""
-    if TEST_MODE or not firestore_db:
-        # Fallback to file system
-        with open(f"{RENT_DIR}/{user_id}.json", 'w') as f:
-            json.dump(rent_info, f)
-        return True
-    
-    try:
-        doc_ref = firestore_db.collection('rents').document(user_id)
-        doc_ref.set(rent_info)
-        return True
-    except Exception as e:
-        print(f"❌ Firestore save failed: {e}")
-        # Fallback to file system
-        with open(f"{RENT_DIR}/{user_id}.json", 'w') as f:
-            json.dump(rent_info, f)
-        return True
-
-def get_rent_from_firestore(user_id):
-    """Get rent info from Firestore"""
-    if TEST_MODE or not firestore_db:
-        # Fallback to file system
-        rent_file = f"{RENT_DIR}/{user_id}.json"
-        if os.path.exists(rent_file):
-            with open(rent_file) as f:
-                return json.load(f)
-        return None
-    
-    try:
-        doc_ref = firestore_db.collection('rents').document(user_id)
-        doc = doc_ref.get()
-        if doc.exists:
-            return doc.to_dict()
-        return None
-    except Exception as e:
-        print(f"❌ Firestore get failed: {e}")
-        # Fallback to file system
-        rent_file = f"{RENT_DIR}/{user_id}.json"
-        if os.path.exists(rent_file):
-            with open(rent_file) as f:
-                return json.load(f)
-        return None
-
-def delete_rent_from_firestore(user_id):
-    """Delete rent info from Firestore"""
-    if TEST_MODE or not firestore_db:
-        # Fallback to file system
-        rent_file = f"{RENT_DIR}/{user_id}.json"
-        if os.path.exists(rent_file):
-            os.remove(rent_file)
-        return True
-    
-    try:
-        doc_ref = firestore_db.collection('rents').document(user_id)
-        doc_ref.delete()
-        return True
-    except Exception as e:
-        print(f"❌ Firestore delete failed: {e}")
-        return False
-
-# Endpoint: Kiralama başlat
-@app.route('/api/rent', methods=['POST'])
-@require_auth
-def start_rent():
-    user = request.user
-    data = request.json or {}
-    duration_minutes = data.get("duration", 30)
-    vehicle_id = data.get("vehicle_id", "default")  # Tesla vehicle ID
-    now = datetime.utcnow()
-
-    rent_info = {
-        "user_id": user["uid"],
-        "user_email": user["email"],
-        "vehicle_id": vehicle_id,
-        "start_time": now.isoformat(),
-        "end_time": (now + timedelta(minutes=duration_minutes)).isoformat(),
-        "duration_minutes": duration_minutes,
-        "allowed_commands": ["unlock", "lock", "honk_horn"],
-        "test_mode": TEST_MODE,
-        "created_at": now.isoformat(),
-        "status": "active"
-    }
-
-    try:
-        save_rent_to_firestore(user["uid"], rent_info)
-        
-        print(f"📝 Rent started for user {user['uid']} ({user['email']}) for {duration_minutes} minutes")
-        return jsonify({
-            "status": "Rent started", 
-            "rent_id": user["uid"],
-            "vehicle_id": vehicle_id,
-            "start_time": rent_info["start_time"],
-            "end_time": rent_info["end_time"],
-            "duration_minutes": duration_minutes,
-            "allowed_commands": rent_info["allowed_commands"],
-            "success": True
-        })
-    except Exception as e:
-        print(f"❌ Rent start failed: {str(e)}")
-        return jsonify({"error": f"Failed to start rent: {str(e)}"}), 500
-
-# Endpoint: Komut gönderme
-@app.route('/api/vehicle/command', methods=['POST'])
-@require_auth
-def vehicle_command():
-    user = request.user
-    data = request.json or {}
-    command = data.get("command")
-
-    if not command:
-        return jsonify({"error": "Command is required"}), 400
-
-    # Get rent info from Firestore
-    rent_info = get_rent_from_firestore(user["uid"])
-    if not rent_info:
-        return jsonify({"error": "No active rent found"}), 403
-
-    try:
-        now = datetime.utcnow().isoformat()
-        if now > rent_info["end_time"]:
-            return jsonify({"error": "Rental period expired"}), 403
-
-        if command not in rent_info["allowed_commands"]:
-            return jsonify({"error": f"Command '{command}' not allowed. Allowed: {rent_info['allowed_commands']}"}), 403
-
-        # Check Tesla Vehicle Command prerequisites
-        prereq_check = check_tesla_command_prerequisites()
-        
-        if TEST_MODE:
-            # Test mode - simulate command execution
-            print(f"🧪 TEST MODE: Simulating command '{command}' for user {user['uid']}")
-            return jsonify({
-                "status": f"{command} sent (simulated)", 
-                "test_mode": True,
-                "vehicle_id": rent_info.get("vehicle_id", "mock_vehicle"),
-                "user_id": user["uid"]
-            })
-
-        # Try real Tesla Vehicle Command first if enabled and ready
-        if TESLA_VEHICLE_COMMAND_ENABLED and prereq_check["ready"]:
-            print(f"🚗 Attempting real Tesla command '{command}' via {TESLA_COMMAND_METHOD}")
-            
-            # Map RenTesla commands to Tesla control commands
-            tesla_command_map = {
-                'honk_horn': 'honk',
-                'unlock': 'unlock', 
-                'lock': 'lock'
-            }
-            
-            tesla_cmd = tesla_command_map.get(command)
-            if tesla_cmd:
-                # Execute real Tesla command
-                result = execute_tesla_command(rent_info["vehicle_id"], tesla_cmd)
-                
-                if result["success"]:
-                    print(f"✅ Real Tesla command '{command}' executed successfully")
-                    return jsonify({
-                        "status": f"{command} sent successfully (REAL)",
-                        "vehicle_id": rent_info["vehicle_id"],
-                        "user_id": user["uid"],
-                        "real_command": True,
-                        "method": result["method"],
-                        "output": result.get("output", "")
-                    })
-                else:
-                    print(f"❌ Real Tesla command failed: {result.get('error', 'Unknown error')}")
-                    # Fall through to TeslaPy fallback
-            else:
-                print(f"⚠️ Command '{command}' not supported by Tesla Vehicle Command")
-                # Fall through to TeslaPy fallback
-
-        # Fallback to TeslaPy (will show protocol limitation for 2021+ vehicles)
-        tesla = get_tesla_instance()
-        if not tesla:
-            return jsonify({"error": "Tesla connection failed"}), 500
-            
-        vehicles = tesla.vehicle_list()
-        if not vehicles:
-            return jsonify({"error": "No vehicles found"}), 404
-            
-        vehicle = vehicles[0]  # Use first vehicle for now
-        
-        # Try to wake up vehicle if it's asleep
-        if vehicle.get('state') != 'online':
-            print(f"🔋 Vehicle is {vehicle.get('state')}, attempting to wake up...")
-            try:
-                vehicle.sync_wake_up()
-                print(f"✅ Vehicle woken up successfully")
-            except Exception as wake_error:
-                print(f"⚠️ Wake up failed: {wake_error}")
-
-        # Execute command via TeslaPy
         try:
-            if command == 'unlock':
-                result = vehicle.command('UNLOCK')
-            elif command == 'lock':
-                result = vehicle.command('LOCK')
-            elif command == 'honk_horn':
-                result = vehicle.command('HONK_HORN')
-            else:
-                return jsonify({"error": f"Unknown command: {command}"}), 400
-
-            print(f"🚗 TeslaPy command '{command}' executed for user {user['uid']} on vehicle {vehicle.get('display_name')}")
+            # Create Tesla instance and get token
+            tesla = teslapy.Tesla(email)
+            
+            # Convert strings to bytes for hashing
+            code_verifier_bytes = code_verifier.encode('utf-8') if isinstance(code_verifier, str) else code_verifier
+            
+            # Get token using the authorization code
+            tesla.fetch_token(authorization_response=callback_url, code_verifier=code_verifier_bytes)
+            
+            # Save token to database instead of file
+            save_tesla_token(email, tesla.token)
+            
+            # Clean up session
+            delete_auth_session(session_id)
+            
             return jsonify({
-                "status": f"{command} sent successfully (TeslaPy)",
-                "vehicle_id": vehicle.get("id"),
-                "vehicle_name": vehicle.get("display_name"),
-                "command_result": result,
-                "user_id": user["uid"],
-                "fallback": True
+                'success': True,
+                'message': 'Authentication successful',
+                'email': email
             })
             
-        except Exception as cmd_error:
-            error_msg = str(cmd_error)
-            # Handle Tesla Vehicle Command Protocol error
-            if "Tesla Vehicle Command Protocol required" in error_msg:
-                print(f"⚠️ Tesla Vehicle Command Protocol required for {command}")
-                return jsonify({
-                    "status": f"{command} sent (protocol limitation)",
-                    "vehicle_id": vehicle.get("id"),
-                    "vehicle_name": vehicle.get("display_name"),
-                    "message": "Tesla now requires Vehicle Command Protocol for this vehicle",
-                    "simulation": True,
-                    "user_id": user["uid"],
-                    "prereq_check": prereq_check
-                })
-            else:
-                raise cmd_error
-        
+        except Exception as tesla_error:
+            print(f"❌ Tesla auth error: {tesla_error}")
+            delete_auth_session(session_id)
+            return jsonify({'error': f'Tesla authentication failed: {str(tesla_error)}'}), 400
+            
     except Exception as e:
-        print(f"❌ Command execution failed: {str(e)}")
-        return jsonify({"error": f"Command execution failed: {str(e)}"}), 500
+        print(f"❌ Auth callback error: {e}")
+        return jsonify({'error': str(e)}), 500
 
-# Endpoint: Aktif kiralamayı görüntüle
-@app.route('/api/rent/status', methods=['GET'])
-@require_auth
-def rent_status():
-    user = request.user
-    
-    try:
-        rent_info = get_rent_from_firestore(user["uid"])
-        
-        if not rent_info:
-            return jsonify({
-                "active_rent": False,
-                "message": "No rent found for this user"
-            })
-        
-        now = datetime.utcnow().isoformat()
-        is_active = now <= rent_info["end_time"]
-        
-        if not is_active:
-            # Clean up expired rent
-            delete_rent_from_firestore(user["uid"])
-        
-        return jsonify({
-            "active_rent": is_active,
-            "rent_info": rent_info if is_active else None,
-            "current_time": now,
-            "time_remaining": rent_info["end_time"] if is_active else None
-        })
-        
-    except Exception as e:
-        print(f"❌ Rent status check failed: {str(e)}")
-        return jsonify({"error": f"Failed to get rent status: {str(e)}"}), 500
-
-# Endpoint: End Rent
-@app.route('/api/rent/end', methods=['POST'])
-@require_auth
-def end_rent():
-    """End active rent manually"""
-    user = request.user
-    
-    try:
-        rent_info = get_rent_from_firestore(user["uid"])
-        
-        if not rent_info:
-            return jsonify({"error": "No active rent found"}), 404
-        
-        # Update rent status to ended
-        rent_info["status"] = "ended"
-        rent_info["ended_at"] = datetime.utcnow().isoformat()
-        
-        # Delete from active rents
-        delete_rent_from_firestore(user["uid"])
-        
-        # Optionally save to rent history
-        if firestore_db and not TEST_MODE:
-            try:
-                history_ref = firestore_db.collection('rent_history').document()
-                history_ref.set(rent_info)
-            except Exception as e:
-                print(f"⚠️ Failed to save rent history: {e}")
-        
-        print(f"🏁 Rent ended for user {user['uid']}")
-        return jsonify({
-            "message": "Rent ended successfully",
-            "rent_info": rent_info,
-            "success": True
-        })
-        
-    except Exception as e:
-        print(f"❌ End rent failed: {str(e)}")
-        return jsonify({"error": f"Failed to end rent: {str(e)}"}), 500
-
-# Endpoint: Tesla Vehicle List
 @app.route('/api/tesla/vehicles', methods=['GET'])
-@require_auth
 def get_tesla_vehicles():
-    """Tesla hesabındaki araçları listele"""
-    if TEST_MODE:
-        return jsonify({
-            "vehicles": [
-                {
-                    "id": "mock_vehicle_123",
-                    "display_name": "Mock Tesla",
-                    "state": "online",
-                    "vin": "5YJ3E1MOCK123456"
-                }
-            ],
-            "test_mode": True,
-            "message": "Mock vehicle data (TEST MODE)"
-        })
-    
     try:
         tesla = get_tesla_instance()
         if not tesla:
-            return jsonify({"error": "Tesla connection failed"}), 500
+            return jsonify({"error": "Tesla connection failed. Please authenticate first."}), 500
         
         vehicles = tesla.vehicle_list()
-        
-        # Convert Vehicle objects to dictionaries
         vehicle_data = []
+        
         for vehicle in vehicles:
             vehicle_info = {
                 "id": vehicle.get("id"),
-                "vehicle_id": vehicle.get("vehicle_id"), 
+                "vehicle_id": vehicle.get("vehicle_id"),
                 "vin": vehicle.get("vin"),
                 "display_name": vehicle.get("display_name"),
                 "state": vehicle.get("state"),
@@ -883,121 +245,110 @@ def get_tesla_vehicles():
                 "api_version": vehicle.get("api_version")
             }
             vehicle_data.append(vehicle_info)
+            
+            # Save vehicle info to database
+            save_vehicle_info(vehicle_info, EMAIL)
         
-        print(f"📊 Found {len(vehicles)} Tesla vehicle(s)")
-        
-        return jsonify({
-            "vehicles": vehicle_data,
-            "count": len(vehicles),
-            "success": True
-        })
-        
+        return jsonify({"vehicles": vehicle_data, "count": len(vehicles), "success": True})
     except Exception as e:
         print(f"❌ Tesla vehicles fetch failed: {str(e)}")
         return jsonify({"error": f"Failed to fetch vehicles: {str(e)}"}), 500
 
-# Endpoint: Tesla Vehicle Data (Full)
-@app.route('/api/tesla/vehicle/<vehicle_id>/data', methods=['GET'])
-@require_auth
-def get_tesla_vehicle_data(vehicle_id):
-    """Belirli bir araç için detaylı veri al"""
-    if TEST_MODE:
-        return jsonify({
-            "vehicle_data": {
-                "id": vehicle_id,
-                "display_name": "Mock Tesla",
-                "state": "online",
-                "charge_state": {
-                    "battery_level": 85,
-                    "charging_state": "Complete",
-                    "charge_limit_soc": 90
-                },
-                "drive_state": {
-                    "latitude": 41.0082,
-                    "longitude": 28.9784,
-                    "speed": None
-                },
-                "climate_state": {
-                    "inside_temp": 22.0,
-                    "outside_temp": 18.5,
-                    "is_climate_on": False
-                }
-            },
-            "test_mode": True
-        })
-    
+@app.route('/vehicles/<int:vehicle_id>/data/<data_type>')
+def get_vehicle_data_with_cache(vehicle_id, data_type):
+    """Get vehicle data with database caching"""
     try:
+        # Check cache first
+        cached_data = get_latest_vehicle_data(vehicle_id, data_type)
+        
+        # If cached data is recent (less than 5 minutes), return it
+        if cached_data:
+            cache_time = cached_data['timestamp']
+            now = datetime.now()
+            if (now - cache_time).total_seconds() < 300:  # 5 minutes
+                return jsonify({
+                    'data': cached_data['data'],
+                    'cached': True,
+                    'timestamp': cache_time.isoformat()
+                })
+        
+        # Get fresh data from Tesla API
         tesla = get_tesla_instance()
         if not tesla:
-            return jsonify({"error": "Tesla connection failed"}), 500
+            return jsonify({'error': 'Not authenticated. Please authenticate first.'}), 401
         
         vehicles = tesla.vehicle_list()
         
-        # Find vehicle by ID
-        target_vehicle = None
-        for vehicle in vehicles:
-            if str(vehicle.get("id")) == str(vehicle_id) or str(vehicle.get("vehicle_id")) == str(vehicle_id):
-                target_vehicle = vehicle
+        vehicle = None
+        for v in vehicles:
+            if v['id'] == vehicle_id:
+                vehicle = tesla.vehicle(vehicle_id)
                 break
         
-        if not target_vehicle:
-            return jsonify({"error": f"Vehicle with ID {vehicle_id} not found"}), 404
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
         
-        # Wake up vehicle if needed and get data
-        if target_vehicle.get("state") != "online":
-            print(f"🔋 Waking up vehicle {vehicle_id}...")
-            target_vehicle.sync_wake_up()
+        # Get the requested data
+        if data_type == 'vehicle_data':
+            data = vehicle.get_vehicle_data()
+        elif data_type == 'charge_state':
+            data = vehicle.get_vehicle_data()['charge_state']
+        elif data_type == 'climate_state':
+            data = vehicle.get_vehicle_data()['climate_state']
+        elif data_type == 'drive_state':
+            data = vehicle.get_vehicle_data()['drive_state']
+        elif data_type == 'vehicle_state':
+            data = vehicle.get_vehicle_data()['vehicle_state']
+        else:
+            return jsonify({'error': 'Invalid data type'}), 400
         
-        # Get full vehicle data
-        target_vehicle.get_vehicle_data()
-        
-        print(f"📊 Retrieved data for vehicle {target_vehicle.get('display_name')}")
+        # Save to cache
+        save_vehicle_data(vehicle_id, data_type, data)
         
         return jsonify({
-            "vehicle_data": dict(target_vehicle),
-            "success": True
+            'data': data,
+            'cached': False,
+            'timestamp': datetime.now().isoformat()
         })
         
     except Exception as e:
-        print(f"❌ Tesla vehicle data fetch failed: {str(e)}")
-        return jsonify({"error": f"Failed to fetch vehicle data: {str(e)}"}), 500
+        print(f"❌ Vehicle data error: {e}")
+        return jsonify({'error': str(e)}), 500
 
-# Endpoint: Tesla Vehicle Summary (Quick)
 @app.route('/api/tesla/vehicle/<vehicle_id>/summary', methods=['GET'])
-@require_auth
 def get_tesla_vehicle_summary(vehicle_id):
-    """Araç için hızlı özet bilgi al (uyandırmadan)"""
-    if TEST_MODE:
-        return jsonify({
-            "summary": {
-                "id": vehicle_id,
-                "display_name": "Mock Tesla",
-                "state": "online",
-                "battery_level": 85,
-                "last_seen": "2 hours ago"
-            },
-            "test_mode": True
-        })
-    
     try:
+        print(f"🔍 Getting summary for vehicle {vehicle_id}")
+        
         tesla = get_tesla_instance()
         if not tesla:
             return jsonify({"error": "Tesla connection failed"}), 500
-        
         vehicles = tesla.vehicle_list()
-        
-        # Find vehicle by ID
         target_vehicle = None
         for vehicle in vehicles:
             if str(vehicle.get("id")) == str(vehicle_id) or str(vehicle.get("vehicle_id")) == str(vehicle_id):
                 target_vehicle = vehicle
                 break
-        
         if not target_vehicle:
             return jsonify({"error": f"Vehicle with ID {vehicle_id} not found"}), 404
-        
-        # Get summary without waking up
         target_vehicle.get_vehicle_summary()
+        
+        # Save vehicle info to database
+        vehicle_info = {
+            "id": target_vehicle.get("id"),
+            "vehicle_id": target_vehicle.get("vehicle_id"),
+            "vin": target_vehicle.get("vin"),
+            "display_name": target_vehicle.get("display_name"),
+            "state": target_vehicle.get("state"),
+            "option_codes": target_vehicle.get("option_codes"),
+            "color": target_vehicle.get("color"),
+            "in_service": target_vehicle.get("in_service"),
+            "api_version": target_vehicle.get("api_version")
+        }
+        
+        print(f"💾 Saving vehicle info: {vehicle_info}")
+        save_result = save_vehicle_info(vehicle_info, EMAIL)
+        print(f"💾 Save result: {save_result}")
         
         summary = {
             "id": target_vehicle.get("id"),
@@ -1010,53 +361,104 @@ def get_tesla_vehicle_summary(vehicle_id):
             "available": target_vehicle.available() if hasattr(target_vehicle, 'available') else None
         }
         
-        print(f"📊 Retrieved summary for vehicle {target_vehicle.get('display_name')}")
-        
-        return jsonify({
-            "summary": summary,
-            "success": True
-        })
-        
+        print(f"✅ Summary completed for vehicle {vehicle_id}")
+        return jsonify({"summary": summary, "success": True})
     except Exception as e:
         print(f"❌ Tesla vehicle summary fetch failed: {str(e)}")
         return jsonify({"error": f"Failed to fetch vehicle summary: {str(e)}"}), 500
 
-# Endpoint: Tesla Vehicle Location
-@app.route('/api/tesla/vehicle/<vehicle_id>/location', methods=['GET'])
-@require_auth
-def get_tesla_vehicle_location(vehicle_id):
-    """Araç konum bilgisini al"""
-    if TEST_MODE:
-        return jsonify({
-            "location": {
-                "latitude": 41.0082,
-                "longitude": 28.9784,
-                "heading": 180,
-                "speed": None,
-                "address": "İstanbul, Turkey (Mock)"
-            },
-            "test_mode": True
-        })
-    
+@app.route('/api/tesla/vehicle/<vehicle_id>/data', methods=['GET'])
+def get_tesla_vehicle_data(vehicle_id):
+    """Get complete vehicle data from Tesla API"""
     try:
         tesla = get_tesla_instance()
         if not tesla:
             return jsonify({"error": "Tesla connection failed"}), 500
         
         vehicles = tesla.vehicle_list()
-        
-        # Find vehicle by ID
         target_vehicle = None
         for vehicle in vehicles:
             if str(vehicle.get("id")) == str(vehicle_id) or str(vehicle.get("vehicle_id")) == str(vehicle_id):
                 target_vehicle = vehicle
                 break
-        
+                
         if not target_vehicle:
             return jsonify({"error": f"Vehicle with ID {vehicle_id} not found"}), 404
         
-        # Get location data (this will wake up if needed)
+        # Get complete vehicle data
+        vehicle_data = target_vehicle.get_vehicle_data()
+        
+        # Save vehicle info to database
+        vehicle_info = {
+            "id": target_vehicle.get("id"),
+            "vehicle_id": target_vehicle.get("vehicle_id"),
+            "vin": target_vehicle.get("vin"),
+            "display_name": target_vehicle.get("display_name"),
+            "state": target_vehicle.get("state"),
+            "option_codes": target_vehicle.get("option_codes"),
+            "color": target_vehicle.get("color"),
+            "in_service": target_vehicle.get("in_service"),
+            "api_version": target_vehicle.get("api_version")
+        }
+        save_vehicle_info(vehicle_info, EMAIL)
+        
+        # Save location data if available
+        drive_state = vehicle_data.get("drive_state", {})
+        if drive_state and drive_state.get("latitude"):
+            location_data = {
+                "latitude": drive_state.get("latitude"),
+                "longitude": drive_state.get("longitude"),
+                "heading": drive_state.get("heading"),
+                "speed": drive_state.get("speed"),
+                "gps_as_of": drive_state.get("gps_as_of"),
+                "power": drive_state.get("power"),
+                "shift_state": drive_state.get("shift_state")
+            }
+            save_vehicle_location(int(vehicle_id), location_data)
+        
+        # Cache the data
+        save_vehicle_data(int(vehicle_id), 'vehicle_data', vehicle_data)
+        
+        return jsonify({
+            "vehicle_data": vehicle_data,
+            "success": True,
+            "cached": False,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        print(f"❌ Tesla vehicle data fetch failed: {str(e)}")
+        return jsonify({"error": f"Failed to fetch vehicle data: {str(e)}"}), 500
+
+@app.route('/api/tesla/vehicle/<vehicle_id>/location', methods=['GET'])
+def get_tesla_vehicle_location(vehicle_id):
+    try:
+        tesla = get_tesla_instance()
+        if not tesla:
+            return jsonify({"error": "Tesla connection failed"}), 500
+        vehicles = tesla.vehicle_list()
+        target_vehicle = None
+        for vehicle in vehicles:
+            if str(vehicle.get("id")) == str(vehicle_id) or str(vehicle.get("vehicle_id")) == str(vehicle_id):
+                target_vehicle = vehicle
+                break
+        if not target_vehicle:
+            return jsonify({"error": f"Vehicle with ID {vehicle_id} not found"}), 404
         target_vehicle.get_vehicle_location_data()
+        
+        # Save vehicle info to database
+        vehicle_info = {
+            "id": target_vehicle.get("id"),
+            "vehicle_id": target_vehicle.get("vehicle_id"),
+            "vin": target_vehicle.get("vin"),
+            "display_name": target_vehicle.get("display_name"),
+            "state": target_vehicle.get("state"),
+            "option_codes": target_vehicle.get("option_codes"),
+            "color": target_vehicle.get("color"),
+            "in_service": target_vehicle.get("in_service"),
+            "api_version": target_vehicle.get("api_version")
+        }
+        save_vehicle_info(vehicle_info, EMAIL)
         
         drive_state = target_vehicle.get("drive_state", {})
         location_data = {
@@ -1069,87 +471,396 @@ def get_tesla_vehicle_location(vehicle_id):
             "shift_state": drive_state.get("shift_state")
         }
         
-        print(f"📍 Retrieved location for vehicle {target_vehicle.get('display_name')}")
+        # Save location to database
+        save_vehicle_location(int(vehicle_id), location_data)
         
-        return jsonify({
-            "location": location_data,
-            "success": True
-        })
-        
+        return jsonify({"location": location_data, "success": True})
     except Exception as e:
         print(f"❌ Tesla vehicle location fetch failed: {str(e)}")
         return jsonify({"error": f"Failed to fetch vehicle location: {str(e)}"}), 500
 
-# Tesla Vehicle Command Integration
-def execute_tesla_command(vehicle_id, command, key_file_path=None):
-    """Execute real Tesla command using Go tool"""
-    if not key_file_path:
-        key_file_path = TESLA_PRIVATE_KEY_PATH
-    
+# Database endpoints
+@app.route('/api/vehicles', methods=['GET'])
+def get_vehicles_from_db():
+    """Get all vehicles from database"""
     try:
-        # Tesla control command arguments
-        cmd_args = [TESLA_GO_TOOL_PATH]
+        vehicles = get_all_vehicles()
         
-        # Add method-specific flags
-        if TESLA_COMMAND_METHOD == 'ble':
-            cmd_args.append('-ble')
+        # Convert timestamps to Turkey time in response
+        for vehicle in vehicles:
+            if vehicle.get('created_at'):
+                vehicle['created_at'] = convert_to_turkey_time(vehicle['created_at']).isoformat()
+            if vehicle.get('updated_at'):
+                vehicle['updated_at'] = convert_to_turkey_time(vehicle['updated_at']).isoformat()
         
-        # Add VIN and key file
-        cmd_args.extend([
-            '-vin', str(vehicle_id),
-            '-key-file', key_file_path,
-            command
-        ])
+        return jsonify({"vehicles": vehicles, "count": len(vehicles), "success": True})
+    except Exception as e:
+        print(f"❌ Get vehicles from DB failed: {str(e)}")
+        return jsonify({"error": f"Failed to get vehicles: {str(e)}"}), 500
+
+@app.route('/api/vehicles-with-locations', methods=['GET'])
+def get_vehicles_with_locations():
+    """Get all vehicles with their latest locations from database, optionally refresh from Tesla API"""
+    try:
+        # Check if refresh parameter is provided
+        refresh_from_api = request.args.get('refresh', 'false').lower() == 'true'
         
-        print(f"🚗 Executing Tesla command: {' '.join(cmd_args)}")
+        vehicles = get_all_vehicles()
+        vehicles_with_locations = []
         
-        # Execute command with timeout
-        result = subprocess.run(
-            cmd_args, 
-            capture_output=True, 
-            text=True, 
-            timeout=30,
-            cwd=os.path.dirname(os.path.abspath(__file__))
-        )
+        # Get Tesla instance if refresh is requested
+        tesla = None
+        if refresh_from_api:
+            tesla = get_tesla_instance()
+            if not tesla:
+                print("⚠️ Tesla connection failed, using database data only")
+                refresh_from_api = False
         
-        if result.returncode == 0:
-            return {
-                "success": True, 
-                "output": result.stdout.strip(),
-                "method": TESLA_COMMAND_METHOD,
-                "real_command": True
+        for vehicle in vehicles:
+            vehicle_id = vehicle.get('vehicle_id')
+            latest_location = get_latest_vehicle_location(vehicle_id) if vehicle_id else None
+            
+            # If refresh is requested and Tesla connection is available
+            if refresh_from_api and tesla and vehicle_id:
+                try:
+                    print(f"🔄 Refreshing location for vehicle {vehicle_id}")
+                    
+                    # Get vehicle from Tesla API
+                    vehicles_list = tesla.vehicle_list()
+                    target_vehicle = None
+                    
+                    for v in vehicles_list:
+                        if str(v.get("vehicle_id")) == str(vehicle_id):
+                            target_vehicle = v
+                            break
+                    
+                    if target_vehicle:
+                        # Get fresh location data
+                        target_vehicle.get_vehicle_location_data()
+                        drive_state = target_vehicle.get("drive_state", {})
+                        
+                        if drive_state and drive_state.get("latitude"):
+                            fresh_location_data = {
+                                "latitude": drive_state.get("latitude"),
+                                "longitude": drive_state.get("longitude"),
+                                "heading": drive_state.get("heading"),
+                                "speed": drive_state.get("speed"),
+                                "gps_as_of": drive_state.get("gps_as_of"),
+                                "power": drive_state.get("power"),
+                                "shift_state": drive_state.get("shift_state")
+                            }
+                            
+                            # Save fresh location to database
+                            if save_vehicle_location(vehicle_id, fresh_location_data):
+                                print(f"✅ Updated location for vehicle {vehicle_id}")
+                                # Get updated location from database
+                                latest_location = get_latest_vehicle_location(vehicle_id)
+                            else:
+                                print(f"❌ Failed to save location for vehicle {vehicle_id}")
+                        else:
+                            print(f"⚠️ No location data available for vehicle {vehicle_id}")
+                    else:
+                        print(f"⚠️ Vehicle {vehicle_id} not found in Tesla API")
+                        
+                except Exception as location_error:
+                    print(f"❌ Location refresh failed for vehicle {vehicle_id}: {location_error}")
+                    # Continue with existing location data
+            
+            vehicle_data = {
+                "vehicle_info": vehicle,
+                "location": latest_location,
+                "has_location": latest_location is not None,
+                "refreshed_from_api": refresh_from_api and tesla is not None
             }
-        else:
-            return {
-                "success": False, 
-                "error": result.stderr.strip(),
-                "output": result.stdout.strip(),
-                "method": TESLA_COMMAND_METHOD
+            vehicles_with_locations.append(vehicle_data)
+        
+        return jsonify({
+            "vehicles": vehicles_with_locations, 
+            "count": len(vehicles_with_locations), 
+            "success": True,
+            "refreshed_from_api": refresh_from_api
+        })
+    except Exception as e:
+        print(f"❌ Get vehicles with locations failed: {str(e)}")
+        return jsonify({"error": f"Failed to get vehicles with locations: {str(e)}"}), 500
+
+@app.route('/api/vehicle/<int:vehicle_id>/location/latest', methods=['GET'])
+def get_latest_location(vehicle_id):
+    """Get latest location for vehicle from database"""
+    try:
+        location = get_latest_vehicle_location(vehicle_id)
+        if not location:
+            return jsonify({"error": "No location data found"}), 404
+        return jsonify({"location": location, "success": True})
+    except Exception as e:
+        print(f"❌ Get latest location failed: {str(e)}")
+        return jsonify({"error": f"Failed to get location: {str(e)}"}), 500
+
+@app.route('/api/sync/logs', methods=['GET'])
+def get_sync_logs():
+    """Get recent sync logs"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        logs = get_recent_sync_logs(limit)
+        return jsonify({"logs": logs, "count": len(logs), "success": True})
+    except Exception as e:
+        print(f"❌ Get sync logs failed: {str(e)}")
+        return jsonify({"error": f"Failed to get sync logs: {str(e)}"}), 500
+
+@app.route('/api/sync/trigger', methods=['POST'])
+def trigger_sync():
+    """Manually trigger a sync operation"""
+    try:
+        import subprocess
+        import threading
+        
+        def run_sync():
+            try:
+                # Run sync script once
+                result = subprocess.run([
+                    'python', 'tesla_sync.py', '--once'
+                ], capture_output=True, text=True, timeout=300)
+                
+                print(f"Sync output: {result.stdout}")
+                if result.stderr:
+                    print(f"Sync errors: {result.stderr}")
+                    
+            except Exception as e:
+                print(f"❌ Sync execution failed: {e}")
+        
+        # Run sync in background thread
+        sync_thread = threading.Thread(target=run_sync)
+        sync_thread.daemon = True
+        sync_thread.start()
+        
+        return jsonify({
+            "message": "Sync operation triggered successfully",
+            "success": True
+        })
+        
+    except Exception as e:
+        print(f"❌ Trigger sync failed: {str(e)}")
+        return jsonify({"error": f"Failed to trigger sync: {str(e)}"}), 500
+
+@app.route('/api/sync/vehicles-locations', methods=['POST'])
+def sync_vehicles_locations():
+    """Sync all vehicles and their locations, return complete data"""
+    try:
+        from datetime import datetime
+        
+        print(f"🔄 Starting vehicles-locations sync at {datetime.now()}")
+        
+        # Get Tesla instance
+        tesla = get_tesla_instance()
+        if not tesla:
+            return jsonify({
+                "error": "Tesla connection failed. Please authenticate first.",
+                "success": False
+            }), 401
+        
+        vehicles_data = []
+        sync_summary = {
+            "vehicles_processed": 0,
+            "locations_updated": 0,
+            "errors_count": 0,
+            "errors": [],
+            "sync_time": datetime.now().isoformat()
+        }
+        
+        try:
+            # Step 1: Fetch vehicles
+            print("📋 Fetching vehicles list...")
+            vehicles = tesla.vehicle_list()
+            print(f"✅ Found {len(vehicles)} vehicles")
+            
+            for vehicle in vehicles:
+                try:
+                    sync_summary["vehicles_processed"] += 1
+                    
+                    # Save vehicle info
+                    vehicle_info = {
+                        "id": vehicle.get("id"),
+                        "vehicle_id": vehicle.get("vehicle_id"),
+                        "vin": vehicle.get("vin"),
+                        "display_name": vehicle.get("display_name"),
+                        "state": vehicle.get("state"),
+                        "option_codes": vehicle.get("option_codes"),
+                        "color": vehicle.get("color"),
+                        "in_service": vehicle.get("in_service"),
+                        "api_version": vehicle.get("api_version")
+                    }
+                    
+                    # Save to database
+                    save_vehicle_info(vehicle_info, EMAIL)
+                    print(f"✅ Saved vehicle: {vehicle_info['display_name']} ({vehicle_info['vehicle_id']})")
+                    
+                    # Step 2: Fetch location for each vehicle
+                    vehicle_id = vehicle.get("vehicle_id")
+                    location_data = None
+                    
+                    if vehicle_id:
+                        try:
+                            print(f"📍 Fetching location for vehicle {vehicle_id}...")
+                            
+                            # Wake up vehicle if it's offline/asleep
+                            if vehicle.get("state") in ["offline", "asleep"]:
+                                print(f"😴 Vehicle {vehicle_id} is {vehicle.get('state')}, attempting to wake...")
+                                try:
+                                    vehicle.sync_wake_up()
+                                    time.sleep(8)  # Wait for vehicle to wake up
+                                except Exception as wake_error:
+                                    print(f"⚠️ Could not wake vehicle {vehicle_id}: {wake_error}")
+                            
+                            # Get location data
+                            vehicle.get_vehicle_location_data()
+                            drive_state = vehicle.get("drive_state", {})
+                            
+                            if drive_state:
+                                location_data = {
+                                    "latitude": drive_state.get("latitude"),
+                                    "longitude": drive_state.get("longitude"),
+                                    "heading": drive_state.get("heading"),
+                                    "speed": drive_state.get("speed"),
+                                    "gps_as_of": drive_state.get("gps_as_of"),
+                                    "power": drive_state.get("power"),
+                                    "shift_state": drive_state.get("shift_state")
+                                }
+                                
+                                # Save location to database
+                                if save_vehicle_location(vehicle_id, location_data):
+                                    sync_summary["locations_updated"] += 1
+                                    print(f"✅ Updated location for vehicle {vehicle_id}")
+                                    print(f"   📍 Lat: {location_data.get('latitude')}, Lng: {location_data.get('longitude')}")
+                                else:
+                                    error_msg = f"Failed to save location for vehicle {vehicle_id}"
+                                    sync_summary["errors"].append(error_msg)
+                                    sync_summary["errors_count"] += 1
+                                    print(f"❌ {error_msg}")
+                            else:
+                                print(f"⚠️ No location data available for vehicle {vehicle_id}")
+                                
+                        except Exception as location_error:
+                            error_msg = f"Location fetch failed for vehicle {vehicle_id}: {str(location_error)}"
+                            sync_summary["errors"].append(error_msg)
+                            sync_summary["errors_count"] += 1
+                            print(f"❌ {error_msg}")
+                    
+                    # Get latest location from database for response
+                    latest_location = get_latest_vehicle_location(vehicle_id) if vehicle_id else None
+                    
+                    # Prepare vehicle data for response
+                    vehicle_response = {
+                        "vehicle_info": vehicle_info,
+                        "location": location_data if location_data else (latest_location if latest_location else None),
+                        "location_source": "fresh" if location_data else ("database" if latest_location else "none"),
+                        "updated_at": datetime.now().isoformat()
+                    }
+                    
+                    vehicles_data.append(vehicle_response)
+                    
+                    # Small delay between vehicles to avoid rate limiting
+                    time.sleep(2)
+                    
+                except Exception as vehicle_error:
+                    error_msg = f"Vehicle processing failed: {str(vehicle_error)}"
+                    sync_summary["errors"].append(error_msg)
+                    sync_summary["errors_count"] += 1
+                    print(f"❌ {error_msg}")
+            
+            # Prepare final response
+            response_data = {
+                "success": True,
+                "message": f"Sync completed successfully",
+                "summary": sync_summary,
+                "vehicles": vehicles_data,
+                "total_vehicles": len(vehicles_data)
             }
             
-    except subprocess.TimeoutExpired:
-        return {"success": False, "error": "Command timeout (30s)", "method": TESLA_COMMAND_METHOD}
-    except FileNotFoundError:
-        return {"success": False, "error": f"Tesla tool not found: {TESLA_GO_TOOL_PATH}", "method": TESLA_COMMAND_METHOD}
+            print(f"✅ Sync completed: {sync_summary['vehicles_processed']} vehicles, {sync_summary['locations_updated']} locations")
+            
+            return jsonify(response_data)
+            
+        except Exception as api_error:
+            error_msg = f"Tesla API call failed: {str(api_error)}"
+            sync_summary["errors"].append(error_msg)
+            sync_summary["errors_count"] += 1
+            print(f"❌ {error_msg}")
+            
+            return jsonify({
+                "success": False,
+                "error": error_msg,
+                "summary": sync_summary,
+                "vehicles": vehicles_data
+            }), 500
+            
     except Exception as e:
-        return {"success": False, "error": str(e), "method": TESLA_COMMAND_METHOD}
+        print(f"❌ Sync vehicles-locations failed: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": f"Sync operation failed: {str(e)}",
+            "vehicles": []
+        }), 500
 
-def check_tesla_command_prerequisites():
-    """Check if Tesla command execution is possible"""
-    checks = {
-        "tool_exists": os.path.exists(TESLA_GO_TOOL_PATH),
-        "key_exists": os.path.exists(TESLA_PRIVATE_KEY_PATH),
-        "tool_executable": os.access(TESLA_GO_TOOL_PATH, os.X_OK) if os.path.exists(TESLA_GO_TOOL_PATH) else False,
-        "enabled": TESLA_VEHICLE_COMMAND_ENABLED
-    }
-    
-    checks["ready"] = all([
-        checks["tool_exists"],
-        checks["key_exists"], 
-        checks["tool_executable"]
-    ])
-    
-    return checks
+@app.route('/api/vehicle/<int:vehicle_id>/update-logs', methods=['GET'])
+def get_vehicle_updates(vehicle_id):
+    """Get update logs for a specific vehicle"""
+    try:
+        update_type = request.args.get('type')  # 'vehicle_info' or 'location'
+        limit = request.args.get('limit', 20, type=int)
+        
+        logs = get_vehicle_update_logs(vehicle_id, update_type, limit)
+        summary = get_vehicle_update_summary(vehicle_id)
+        
+        # Convert timestamps to Turkey time in response
+        for log in logs:
+            if log.get('created_at'):
+                log['created_at'] = convert_to_turkey_time(log['created_at']).isoformat()
+        
+        for s in summary:
+            if s.get('last_update'):
+                s['last_update'] = convert_to_turkey_time(s['last_update']).isoformat()
+        
+        return jsonify({
+            "vehicle_id": vehicle_id,
+            "logs": logs,
+            "summary": summary,
+            "count": len(logs),
+            "success": True
+        })
+    except Exception as e:
+        print(f"❌ Get vehicle update logs failed: {str(e)}")
+        return jsonify({"error": f"Failed to get update logs: {str(e)}"}), 500
+
+@app.route('/api/update-logs', methods=['GET'])
+def get_all_update_logs():
+    """Get all vehicle update logs"""
+    try:
+        update_type = request.args.get('type')  # 'vehicle_info' or 'location'
+        limit = request.args.get('limit', 50, type=int)
+        
+        logs = get_vehicle_update_logs(None, update_type, limit)
+        
+        return jsonify({
+            "logs": logs,
+            "count": len(logs),
+            "success": True
+        })
+    except Exception as e:
+        print(f"❌ Get all update logs failed: {str(e)}")
+        return jsonify({"error": f"Failed to get update logs: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=DEBUG, host=HOST, port=PORT)
+    print("🔄 Initializing database...")
+    if init_db_pool():
+        if test_connection():
+            print("🏗️ Creating database tables...")
+            create_tables()
+            print("🧹 Cleaning up expired sessions...")
+            cleanup_expired_sessions()
+            
+            print("🚀 Starting Tesla Backend API...")
+            app.run(host='0.0.0.0', port=8000, debug=True)
+        else:
+            print("❌ Database connection failed!")
+    else:
+        print("❌ Database initialization failed!")

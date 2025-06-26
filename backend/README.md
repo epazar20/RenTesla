@@ -1,316 +1,334 @@
-# RenTesla Backend API
+# Tesla REST API Microservice
 
-🚗 Tesla vehicle rental API with Firebase Authentication and TeslaPy integration.
+A production-ready REST API microservice for Tesla vehicle integration using TeslaPy and PostgreSQL database.
 
 ## Features
 
-- 🔐 **Firebase Authentication** - JWT token based authentication
-- 🚗 **Tesla API Integration** - Complete Tesla vehicle control via TeslaPy
-- 📱 **RESTful API** - Clean REST endpoints for all operations
-- 🔒 **Secured Endpoints** - All API routes protected with JWT tokens
-- 📊 **Firestore Database** - Rental data storage in Firebase Firestore
-- 🧪 **Comprehensive Testing** - Complete test suite included
+- 🚗 **Tesla API Integration**: Full Tesla API access via TeslaPy
+- 🔐 **OAuth Authentication**: Secure Tesla OAuth 2.0 flow
+- 🗄️ **PostgreSQL Database**: Supabase PostgreSQL integration with connection pooling
+- 💾 **Data Caching**: Vehicle data caching with configurable TTL
+- 📊 **Session Management**: Database-backed authentication sessions
+- 🔄 **Real-time Data**: Live vehicle data endpoints
+- 🛡️ **Error Handling**: Comprehensive error handling and logging
 
-## Quick Start
+## Database Schema
 
-### 1. Setup Environment
+### Tables
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy environment file
-cp env.example .env
-
-# Update .env with your Tesla credentials
-TESLA_EMAIL=your-tesla-email@example.com
-FIREBASE_WEB_API_KEY=your-firebase-web-api-key
-```
-
-### 2. Setup Firebase User
-
-```bash
-# Create the test user in Firebase
-python setup_user.py
-```
-
-This creates a user with:
-- Email: `user@gmail.com`
-- Password: `Ep*2857088*`
-
-### 3. Start the API
-
-```bash
-python app.py
-```
-
-The API will start on `http://localhost:5001`
-
-### 4. Test the API
-
-```bash
-# Run comprehensive tests
-python test_complete_api.py
-
-# Or test with custom URL
-python test_complete_api.py --url http://localhost:5001
-```
-
-## Authentication Flow
-
-### 1. Login to get JWT token
-
-```bash
-curl -X POST http://localhost:5001/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@gmail.com",
-    "password": "Ep*2857088*"
-  }'
-```
-
-Response:
-```json
-{
-  "message": "Login successful",
-  "id_token": "eyJhbGciOiJSUzI1NiIsIn...",
-  "refresh_token": "AMf-vBxYXm...",
-  "user_id": "firebase_user_id",
-  "email": "user@gmail.com",
-  "expires_in": "3600"
-}
-```
-
-### 2. Use JWT token for API calls
-
-```bash
-curl -X GET http://localhost:5001/api/tesla/vehicles \
-  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsIn..."
-```
+- **users**: User management with Tesla email linking
+- **vehicles**: Vehicle information and metadata
+- **auth_sessions**: OAuth session management with expiration
+- **vehicle_data_logs**: Cached vehicle data with timestamps
 
 ## API Endpoints
 
 ### Authentication
+- `POST /auth/init` - Initialize Tesla OAuth flow
+- `POST /auth/callback` - Handle OAuth callback
+- `POST /auth/clear` - Clear authentication tokens
+- `GET /auth/status` - Check authentication status
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/login` | Login with email/password |
-| POST | `/auth/refresh` | Refresh JWT token |
-| GET | `/health` | API health check |
+### Vehicle Data (Live)
+- `GET /api/tesla/vehicles` - List all vehicles (live from Tesla API)
+- `GET /vehicles/{vehicle_id}/data/{data_type}` - Get cached vehicle data
+- `GET /api/tesla/vehicle/{vehicle_id}/summary` - Vehicle summary
+- `GET /api/tesla/vehicle/{vehicle_id}/data` - **NEW!** Complete vehicle data
+- `GET /api/tesla/vehicle/{vehicle_id}/charge` - Charge state
+- `GET /api/tesla/vehicle/{vehicle_id}/climate` - Climate state
+- `GET /api/tesla/vehicle/{vehicle_id}/location` - Vehicle location (live)
 
-### Tesla Vehicle Operations (Protected)
+### Vehicle Data (Database)
+- `GET /api/vehicles` - List all vehicles from database
+- `GET /api/vehicles-with-locations` - Get all vehicles with latest locations
+- `GET /api/vehicle/{vehicle_id}/location/latest` - Get latest location for vehicle
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/tesla/vehicles` | List all vehicles |
-| GET | `/api/tesla/vehicle/{id}/data` | Get full vehicle data |
-| GET | `/api/tesla/vehicle/{id}/summary` | Get vehicle summary |
-| GET | `/api/tesla/vehicle/{id}/location` | Get vehicle location |
+### Sync Operations
+- `POST /api/sync/vehicles-locations` - **NEW!** Sync all vehicles and locations, return complete data
+- `GET /api/sync/logs` - Get recent sync logs
+- `POST /api/sync/trigger` - Manually trigger background sync
 
-### Vehicle Commands (Protected)
+### Update Logs
+- `GET /api/vehicle/{vehicle_id}/update-logs` - **NEW!** Get update logs for specific vehicle
+- `GET /api/update-logs` - **NEW!** Get all vehicle update logs
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/vehicle/command` | Send command to vehicle |
+### Vehicle Commands
+- `POST /api/tesla/vehicle/{vehicle_id}/wake` - Wake up vehicle
+- `POST /api/tesla/vehicle/{vehicle_id}/flash` - Flash lights
+- `POST /api/tesla/vehicle/{vehicle_id}/honk` - Honk horn
+- `POST /api/tesla/vehicle/{vehicle_id}/climate/on` - Turn on climate
+- `POST /api/tesla/vehicle/{vehicle_id}/climate/off` - Turn off climate
 
-### Rental Operations (Protected)
+## Environment Variables
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/rent` | Start a rental |
-| GET | `/api/rent/status` | Get current rental status |
-| POST | `/api/rent/end` | End current rental |
-
-## Example Usage
-
-### Login and Get Vehicles
-
-```python
-import requests
-
-# Login
-login_response = requests.post('http://localhost:5001/auth/login', json={
-    'email': 'user@gmail.com',
-    'password': 'Ep*2857088*'
-})
-
-token = login_response.json()['id_token']
-
-# Get vehicles
-vehicles_response = requests.get(
-    'http://localhost:5001/api/tesla/vehicles',
-    headers={'Authorization': f'Bearer {token}'}
-)
-
-vehicles = vehicles_response.json()['vehicles']
-print(f"Found {len(vehicles)} vehicles")
-```
-
-### Start a Rental
-
-```python
-# Start rental
-rental_response = requests.post(
-    'http://localhost:5001/api/rent',
-    headers={'Authorization': f'Bearer {token}'},
-    json={
-        'vehicle_id': vehicles[0]['id'],
-        'duration_hours': 2
-    }
-)
-
-rental_info = rental_response.json()
-print(f"Rental started: {rental_info['rent_info']['rent_id']}")
-```
-
-## Security Features
-
-- 🔐 **JWT Token Authentication** - All API endpoints protected
-- 🔥 **Firebase Auth Integration** - Secure user management
-- 🛡️ **Token Validation** - Automatic token verification
-- ⏰ **Token Refresh** - Seamless token renewal
-- 🚫 **Unauthorized Access Blocking** - 401/403 responses for invalid tokens
-
-## Testing
-
-The project includes comprehensive test coverage:
+Copy `env.example` to `.env` and configure:
 
 ```bash
-# Run all tests
-python test_complete_api.py
+# Tesla Configuration
+TESLA_EMAIL=your-email@example.com
 
-# Test specific scenarios
-python test_complete_api.py --email user@gmail.com --password Ep*2857088*
-```
-
-Test coverage includes:
-- ✅ Authentication flow
-- ✅ Token refresh
-- ✅ Unauthorized access blocking
-- ✅ Tesla vehicle operations
-- ✅ Rental operations
-- ✅ Vehicle commands
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file:
-
-```env
-# Tesla API
-TESLA_EMAIL=your-tesla-email@example.com
-TEST_MODE=False
-
-# Flask
-SECRET_KEY=your-secret-key
-DEBUG=True
-HOST=0.0.0.0
+# App Configuration
 PORT=5001
+HOST=0.0.0.0
+DEBUG=True
 
-# Firebase
-FIREBASE_SERVICE_ACCOUNT_PATH=serviceAccountKey.json
-FIREBASE_WEB_API_KEY=your-firebase-web-api-key
+# Security
+SECRET_KEY=your-secret-key-here
+
+# Database Configuration (Supabase PostgreSQL)
+DB_USER=postgres.your_project_id
+DB_PASSWORD=your-password
+DB_HOST=aws-0-eu-north-1.pooler.supabase.com
+DB_PORT=6543
+DB_NAME=postgres
+DATABASE_URL=postgresql://postgres:your-password@db.your_project_id.supabase.co:5432/postgres
 ```
 
-### Firebase Setup
+## Installation
 
-1. Download `serviceAccountKey.json` from Firebase Console
-2. Place it in the backend directory
-3. Update `FIREBASE_WEB_API_KEY` in environment
+1. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## Production Deployment
+2. **Configure Environment**
+   ```bash
+   cp env.example .env
+   # Edit .env with your database credentials
+   ```
 
-### Security Checklist
+3. **Initialize Database**
+   ```bash
+   python database.py
+   ```
 
-- [ ] Change `SECRET_KEY` to a strong random value
-- [ ] Set `DEBUG=False`
-- [ ] Use environment variables for sensitive data
-- [ ] Enable HTTPS
-- [ ] Restrict CORS origins
-- [ ] Set up proper logging
-- [ ] Configure rate limiting
+4. **Run Application**
+   ```bash
+   python app.py
+   ```
 
-### Docker Deployment
+## Database Setup
 
-```dockerfile
-FROM python:3.9-slim
+The application automatically creates necessary tables on startup:
 
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-
-EXPOSE 5001
-CMD ["python", "app.py"]
+```python
+python database.py
 ```
 
-## Troubleshooting
+This will:
+- Test database connection
+- Create all required tables
+- Clean up expired sessions
 
-### Common Issues
+## Usage
 
-1. **Firebase Connection Failed**
-   - Check `serviceAccountKey.json` exists
-   - Verify Firebase project ID matches
+### 1. Authentication Flow
 
-2. **Tesla API Errors**
-   - Ensure Tesla email is configured
-   - Check Tesla account has vehicle access
+Initialize authentication:
+```bash
+curl -X POST http://localhost:5001/auth/init \
+  -H "Content-Type: application/json" \
+  -d '{"email": "your-tesla-email@example.com"}'
+```
 
-3. **Authentication Errors**
-   - Verify user exists in Firebase
-   - Check token expiration
-   - Validate Firebase Web API key
+Complete authentication with callback URL:
+```bash
+curl -X POST http://localhost:5001/auth/callback \
+  -H "Content-Type: application/json" \
+  -d '{"callback_url": "https://auth.tesla.com/void/callback?code=...&state=..."}'
+```
 
-### Debug Mode
+### 2. Vehicle Data with Caching
 
-Set `DEBUG=True` in environment for detailed error logs.
+Get cached vehicle data (5-minute TTL):
+```bash
+curl http://localhost:5001/vehicles/123456789/data/charge_state
+```
 
-## API Response Examples
+Available data types:
+- `vehicle_data` - Complete vehicle data
+- `charge_state` - Battery and charging info
+- `climate_state` - HVAC and temperature
+- `drive_state` - Location and driving data
+- `vehicle_state` - Doors, windows, locks
 
-### Vehicle List Response
+### 3. **NEW!** One-Time Sync with Complete Response
 
+Sync all vehicles and get complete data with locations:
+```bash
+curl -X POST http://localhost:5001/api/sync/vehicles-locations
+```
+
+Response example:
 ```json
 {
+  "success": true,
+  "message": "Sync completed successfully",
+  "summary": {
+    "vehicles_processed": 1,
+    "locations_updated": 1,
+    "errors_count": 0,
+    "errors": [],
+    "sync_time": "2025-06-26T20:45:05.813929"
+  },
+  "total_vehicles": 1,
   "vehicles": [
     {
-      "id": "123456789",
-      "display_name": "My Tesla",
-      "state": "online",
-      "vin": "5YJ3E1EA1KF123456"
+      "vehicle_info": {
+        "vehicle_id": 1689262419488057,
+        "display_name": "Model Y",
+        "state": "offline",
+        "vin": "XP7YGCEL8PB160835"
+      },
+      "location": {
+        "latitude": 37.066261,
+        "longitude": 35.378087,
+        "heading": 122,
+        "gps_as_of": 1750959945
+      },
+      "location_source": "fresh",
+      "updated_at": "2025-06-26T20:45:49.203610"
     }
-  ],
-  "count": 1,
-  "success": true
+  ]
 }
 ```
 
-### Rental Start Response
+### 4. Database Queries
 
+Get all vehicles with latest locations:
+```bash
+curl http://localhost:5001/api/vehicles-with-locations
+```
+
+Get specific vehicle's latest location:
+```bash
+curl http://localhost:5001/api/vehicle/123456789/location/latest
+```
+
+### 5. Vehicle Commands
+
+Wake up vehicle:
+```bash
+curl -X POST http://localhost:5001/api/tesla/vehicle/123456789/wake
+```
+
+Control climate:
+```bash
+curl -X POST http://localhost:5001/api/tesla/vehicle/123456789/climate/on
+```
+
+### 6. Update Logs and Change Tracking
+
+Get update logs for specific vehicle:
+```bash
+curl "http://localhost:5001/api/vehicle/1689262419488057/update-logs"
+```
+
+Get only location updates:
+```bash
+curl "http://localhost:5001/api/vehicle/1689262419488057/update-logs?type=location&limit=10"
+```
+
+Get all vehicle update logs:
+```bash
+curl "http://localhost:5001/api/update-logs?type=vehicle_info&limit=20"
+```
+
+Update log response example:
 ```json
 {
-  "message": "Rent started successfully",
-  "rent_info": {
-    "rent_id": "rent_123",
-    "vehicle_id": "123456789",
-    "user_id": "firebase_user_id",
-    "status": "active",
-    "started_at": "2024-01-15T10:30:00Z",
-    "duration_hours": 2
-  },
-  "success": true
+  "vehicle_id": 1689262419488057,
+  "logs": [
+    {
+      "id": 3,
+      "update_type": "vehicle_info", 
+      "changes": {
+        "state": {
+          "old": "offline",
+          "new": "online"
+        }
+      },
+      "old_data": {
+        "state": "offline",
+        "display_name": "Model Y"
+      },
+      "new_data": {
+        "state": "online", 
+        "display_name": "Model Y"
+      },
+      "updated_by": "esrefpazar@hotmail.com",
+      "created_at": "2025-06-26T17:57:38Z"
+    }
+  ],
+  "summary": [
+    {
+      "update_type": "vehicle_info",
+      "update_count": 2,
+      "last_update": "2025-06-26T17:57:38Z"
+    }
+  ]
 }
 ```
 
-## License
+**Update Log Features:**
+- 🔄 **UPSERT Logic**: Vehicle data and locations update existing records instead of creating duplicates
+- 📝 **Change Tracking**: Detailed logs of what changed (old vs new values)  
+- 🕒 **Timestamp Tracking**: Every update includes `updated_at` timestamp
+- 📊 **Update Summary**: Count and last update time per data type
+- 🔍 **Filtering**: Filter logs by vehicle, update type, and limit results
+- 🎯 **Auto Database Sync**: All Tesla API endpoints automatically save data to database
 
-MIT License - see LICENSE file for details.
+**UPSERT Behavior:**
+- Vehicle records are identified by `vehicle_id` (primary key)
+- Location records update the latest entry per vehicle
+- No duplicate records are created
+- All changes are logged with old/new value comparison
 
-## Support
+## Development
 
-For issues and questions:
-1. Check this README
-2. Run the test suite
-3. Check Firebase Console for auth issues
-4. Verify Tesla API credentials
+### Database Management
+
+Test connection:
+```python
+from database import test_connection
+test_connection()
+```
+
+Create tables:
+```python
+from database import create_tables
+create_tables()
+```
+
+Clean expired sessions:
+```python
+from database import cleanup_expired_sessions
+cleanup_expired_sessions()
+```
+
+### Error Handling
+
+The application includes comprehensive error handling:
+- Database connection failures
+- Tesla API errors
+- Authentication timeouts
+- Invalid vehicle IDs
+
+## Security
+
+- OAuth 2.0 with PKCE for Tesla authentication
+- Database-backed session management
+- Environment variable configuration
+- Connection pooling for database security
+- Automatic session cleanup
+
+## Dependencies
+
+- `flask` - Web framework
+- `teslapy` - Tesla API client
+- `psycopg2-binary` - PostgreSQL adapter
+- `python-dotenv` - Environment management
+- `PyJWT` - JWT token handling
+
+---
+MIT Lisansı
