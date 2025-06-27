@@ -541,30 +541,30 @@ def get_vehicles_with_locations():
                     if target_vehicle:
                         # Get fresh location data
                         try:
-                            target_vehicle.get_vehicle_location_data()
-                            drive_state = target_vehicle.get("drive_state", {})
+                        target_vehicle.get_vehicle_location_data()
+                        drive_state = target_vehicle.get("drive_state", {})
+                        
+                        if drive_state and drive_state.get("latitude"):
+                            fresh_location_data = {
+                                "latitude": drive_state.get("latitude"),
+                                "longitude": drive_state.get("longitude"),
+                                "heading": drive_state.get("heading"),
+                                "speed": drive_state.get("speed"),
+                                "gps_as_of": drive_state.get("gps_as_of"),
+                                "power": drive_state.get("power"),
+                                "shift_state": drive_state.get("shift_state")
+                            }
                             
-                            if drive_state and drive_state.get("latitude"):
-                                fresh_location_data = {
-                                    "latitude": drive_state.get("latitude"),
-                                    "longitude": drive_state.get("longitude"),
-                                    "heading": drive_state.get("heading"),
-                                    "speed": drive_state.get("speed"),
-                                    "gps_as_of": drive_state.get("gps_as_of"),
-                                    "power": drive_state.get("power"),
-                                    "shift_state": drive_state.get("shift_state")
-                                }
-                                
                                 # Save fresh location to database with UPSERT
-                                if save_vehicle_location(vehicle_id, fresh_location_data):
-                                    print(f"✅ Updated location for vehicle {vehicle_id}")
+                            if save_vehicle_location(vehicle_id, fresh_location_data):
+                                print(f"✅ Updated location for vehicle {vehicle_id}")
                                     print(f"   📍 Lat: {fresh_location_data.get('latitude')}, Lng: {fresh_location_data.get('longitude')}")
-                                    # Get updated location from database
-                                    latest_location = get_latest_vehicle_location(vehicle_id)
-                                else:
-                                    print(f"❌ Failed to save location for vehicle {vehicle_id}")
+                                # Get updated location from database
+                                latest_location = get_latest_vehicle_location(vehicle_id)
                             else:
-                                print(f"⚠️ No location data available for vehicle {vehicle_id}")
+                                print(f"❌ Failed to save location for vehicle {vehicle_id}")
+                        else:
+                            print(f"⚠️ No location data available for vehicle {vehicle_id}")
                         except Exception as location_api_error:
                             print(f"⚠️ Location API call failed for vehicle {vehicle_id}: {location_api_error}")
                     else:

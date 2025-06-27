@@ -1,0 +1,115 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/mobile
+
+spring:
+  application:
+    name: rentesla-mobile-backend
+  
+  # Database Configuration (Supabase PostgreSQL - Corrected)
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://aws-0-eu-north-1.pooler.supabase.com:6543/postgres}
+    username: ${DB_USER:postgres.irwytzimorfljkuugcfa}
+    password: ${DB_PASSWORD:Ep*2857088*}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 300000
+      connection-timeout: 20000
+      validation-timeout: 5000
+      leak-detection-threshold: 60000
+  
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          time_zone: Europe/Istanbul
+    open-in-view: false
+  
+  # Jackson Configuration
+  jackson:
+    time-zone: Europe/Istanbul
+    date-format: yyyy-MM-dd'T'HH:mm:ss.SSSZ
+    default-property-inclusion: non-null
+  
+  # Security Configuration (Removed basic auth - using JWT instead)
+  # security:
+  #   user:
+  #     name: admin
+  #     password: ${ADMIN_PASSWORD:admin123}
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:your-jwt-secret-key-here-should-be-at-least-256-bits-long-secure-key}
+  expiration: ${JWT_EXPIRATION:86400000} # 24 hours in milliseconds
+
+# API Documentation
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  show-actuator: true
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    com.rentesla: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Custom Application Properties
+app:
+  name: RenTesla Mobile Backend
+  version: 1.0.0
+  description: Mobile backend microservice for Tesla vehicle rental system
+  timezone: Europe/Istanbul
+  
+  # CORS Configuration
+  cors:
+    allowed-origin-patterns: 
+      - "http://localhost:*"
+      - "https://localhost:*"
+      - "exp://*:*"
+      - "http://192.168.*:*"
+      - "https://192.168.*:*"
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+    allowed-headers: "*"
+    allow-credentials: false
+  
+  # Tesla API Integration
+  tesla-api:
+    base-url: http://localhost:8000
+    timeout: 30000
+
