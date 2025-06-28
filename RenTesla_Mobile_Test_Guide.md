@@ -4,6 +4,8 @@
 
 RenTesla mobile uygulaması React Native ve Expo framework'ü kullanılarak geliştirilmiştir. Bu rehber, uygulamayı Android ve iOS emülatörlerinde nasıl test edeceğinizi adım adım gösterir.
 
+**Son Test Durumu:** ✅ Backend çalışıyor, Android emulator aktif, Expo başarıyla başlatıldı
+
 ## 🔧 Gereksinimler
 
 ### Sistem Gereksinimleri
@@ -21,6 +23,10 @@ npm --version
 
 # Expo CLI'yi global olarak yükleyin
 npm install -g @expo/cli
+
+# Android SDK environment variables (macOS için)
+export ANDROID_SDK_ROOT=~/Library/Android/sdk
+export PATH=$PATH:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools
 ```
 
 ## 🚀 Projeyi Başlatma
@@ -34,6 +40,11 @@ cd mobile_backend
 # .env dosyasını kontrol edin (Supabase bağlantı bilgileri)
 cat .env
 
+# Environment variables örneği:
+# DATABASE_URL=jdbc:postgresql://aws-0-eu-north-1.pooler.supabase.com:6543/postgres
+# DB_USER=postgres.irwytzimorfljkuugcfa
+# DB_PASSWORD=Ep*2857088*
+
 # Maven ile backend'i başlatın
 mvn clean install -DskipTests
 mvn spring-boot:run
@@ -41,8 +52,9 @@ mvn spring-boot:run
 
 **Backend Kontrolü:**
 ```bash
-# Health check
+# Health check (Backend çalışıyor ✅)
 curl http://localhost:8080/api/mobile/actuator/health
+# Expected: {"status":"UP","components":{"db":{"status":"UP"}}}
 
 # API Documentation
 open http://localhost:8080/api/mobile/swagger-ui.html
@@ -59,49 +71,73 @@ npm install
 
 # Expo development server'ı başlatın
 npx expo start
+
+# Not: Port 8081 kullanımda ise 8082'yi kabul edin
+# Starting Metro Bundler on port 8082 ✅
 ```
 
-## 📱 Emülatör Kurulumu ve Kullanımı
+## 📱 Android Emülatör Kurulumu ve Kullanımı
 
-### Android Emülatör (Android Studio)
+### ✅ Mevcut Çalışan Durum
+- **Aktif Emulator:** Pixel_7 (emulator-5554)
+- **SDK Yolu:** ~/Library/Android/sdk
+- **ADB Status:** Device olarak tanınıyor
 
-#### Kurulum:
-1. **Android Studio'yu indirin ve kurun**
-   - https://developer.android.com/studio
-   
-2. **Android SDK ve Emülatör kurun**
-   ```bash
-   # Android Studio'yu açın
-   # Tools > SDK Manager > SDK Platforms
-   # En son Android versiyonunu seçin (API 34)
-   
-   # SDK Tools sekmesinde:
-   # - Android SDK Build-Tools
-   # - Android Emulator
-   # - Android SDK Platform-Tools
-   ```
+### Android SDK Environment Setup (Kalıcı)
 
-3. **Virtual Device oluşturun**
-   ```bash
-   # Tools > Device Manager > Create Device
-   # Pixel 7 Pro (recommended) seçin
-   # System Image: Android 14 (API 34)
-   # Advanced Settings: RAM 4GB, Internal Storage 8GB
-   ```
-
-#### Test Etme:
 ```bash
-# Android emülatörü başlatın
-# Android Studio > Device Manager > Play button
+# .zshrc dosyasına ekleyin (kalıcı çözüm)
+echo '
+# Android SDK Environment Variables
+export ANDROID_SDK_ROOT=~/Library/Android/sdk
+export PATH=$PATH:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools' >> ~/.zshrc
 
-# Expo terminalde 'a' basın (Android)
-# veya
-npx expo run:android
+# Değişiklikleri uygulayın
+source ~/.zshrc
 ```
 
-### iOS Simulator (macOS only)
+### Mevcut Emülatörler
 
-#### Kurulum:
+```bash
+# Kullanılabilir emülatörleri listeleyin
+emulator -list-avds
+# Çıktı:
+# Medium_Phone_API_36.0
+# Pixel_7 ✅ (Şu anda çalışan)
+```
+
+### Emülatör Yönetimi
+
+```bash
+# Emülatör başlatma
+emulator -avd Pixel_7 -no-snapshot-load &
+
+# Emülatör durumunu kontrol etme
+adb devices
+# Expected: emulator-5554    device ✅
+
+# Emülatör kapatma
+adb emu kill
+```
+
+### Test Etme (Android)
+
+```bash
+# Method 1: Expo development server'dan
+# Expo terminalde 'a' basın (Android)
+
+# Method 2: Direct run
+export ANDROID_SDK_ROOT=~/Library/Android/sdk
+export PATH=$PATH:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools
+npx expo run:android
+
+# Method 3: Start specific device
+npx expo start --android
+```
+
+## 📱 iOS Simulator (macOS only)
+
+### Kurulum:
 1. **Xcode'u App Store'dan indirin**
    
 2. **iOS Simulator'ı açın**
@@ -117,7 +153,7 @@ npx expo run:android
    - Device > iPhone 15 Pro (recommended)
    - iOS 17.0 veya üzeri
 
-#### Test Etme:
+### Test Etme (iOS)
 ```bash
 # iOS simulator'da test etmek için
 # Expo terminalde 'i' basın (iOS)
@@ -127,227 +163,280 @@ npx expo run:ios
 
 ## 🔍 Test Senaryoları
 
-### 1. Ana Sayfa Testi
-- ✅ Uygulama başarıyla açılıyor mu?
-- ✅ Welcome mesajı görünüyor mu?
-- ✅ Navigation bar çalışıyor mu?
-- ✅ İstatistik kartları yükleniyor mu?
-
-### 2. Araç Listesi Testi
-- ✅ Vehicles sekmesi açılıyor mu?
-- ✅ Araç listesi yükleniyor mu?
-- ✅ Arama fonksiyonu çalışıyor mu?
-- ✅ Araç detayına geçiş yapılıyor mu?
-
-### 3. Harita Testi
-- ✅ Map sekmesi açılıyor mu?
-- ✅ Placeholder mesajı görünüyor mu?
-- ✅ Refresh butonu çalışıyor mu?
-
-### 4. Profil Testi
-- ✅ Profile sekmesi açılıyor mu?
-- ✅ Kullanıcı bilgileri görünüyor mu?
-- ✅ Menu items'a tıklanıyor mu?
-
-### 5. API Bağlantı Testleri
+### 1. ✅ Backend API Testleri (Başarılı)
 ```bash
-# Backend API'leri test edin
-curl -X GET http://localhost:8080/api/mobile/vehicles
-curl -X GET http://localhost:8080/api/mobile/users/stats
-curl -X GET http://localhost:8080/api/mobile/vehicles/stats
-```
-
-## 🐛 Yaygın Sorunlar ve Çözümleri
-
-### Problem: Metro bundler hatası
-```bash
-# Cache'i temizleyin
-npx expo start --clear
-
-# Node modules'u yeniden yükleyin
-rm -rf node_modules
-npm install
-```
-
-### Problem: Android emülatör yavaş
-```bash
-# Emülatör ayarlarını optimize edin
-# AVD Manager > Edit > Advanced Settings
-# RAM: 4GB, VM Heap: 256MB
-# Graphics: Hardware - GLES 2.0
-```
-
-### Problem: iOS simulator bulunamıyor
-```bash
-# Xcode command line tools'u yükleyin
-sudo xcode-select --install
-
-# Simulator yolunu kontrol edin
-xcrun simctl list devices
-```
-
-### Problem: API bağlantı hatası
-```bash
-# Backend'in çalıştığını kontrol edin
+# Health Check
 curl http://localhost:8080/api/mobile/actuator/health
+# Status: UP ✅
 
-# Cors ayarlarını kontrol edin
-# application.yml'de cors konfigürasyonu
+# Vehicle API
+curl -X GET http://localhost:8080/api/mobile/vehicles
+# Database bağlantısı: Supabase PostgreSQL ✅
+
+# User Stats API
+curl -X GET http://localhost:8080/api/mobile/users/stats
 ```
 
-## 📊 Test Checklist
+### 2. Frontend-Backend Entegrasyonu
+- ✅ Backend port 8080 çalışıyor
+- ✅ Frontend port 8082 çalışıyor
+- ✅ API endpoint configuration: localhost:8080
+- ✅ Supabase database connection aktif
 
-### Başlangıç Kontrolleri
-- [ ] Node.js kurulu (v18+)
-- [ ] Expo CLI kurulu
-- [ ] Android Studio/Xcode kurulu
-- [ ] Backend çalışıyor (port 8080)
-- [ ] Frontend çalışıyor (Expo)
+### 3. Emülatör Test Senaryoları
+- ✅ Android emulator başarıyla çalışıyor
+- ✅ ADB device detection çalışıyor
+- ✅ Expo Metro bundler çalışıyor
+- 🔄 iOS simulator testi bekleniyor
 
-### Functional Tests
-- [ ] App açılış ekranı
+### 4. Uygulama Fonksiyonellik Testleri
+- [ ] Ana sayfa yüklenmesi
 - [ ] Navigation tabs çalışması
-- [ ] API data yüklenmesi
-- [ ] Search functionality
-- [ ] Detail page navigation
-- [ ] Error handling
+- [ ] API data fetch işlemleri
+- [ ] Araç listesi görüntülenmesi
+- [ ] Harita fonksiyonelliği
+- [ ] Profil yönetimi
 
-### UI/UX Tests
-- [ ] Responsive design
-- [ ] Loading states
-- [ ] Empty states
-- [ ] Error messages
-- [ ] Icons ve images
-- [ ] Color scheme
+## 🐛 Çözülmüş Sorunlar
 
-### Performance Tests
-- [ ] App açılış süresi (<3s)
-- [ ] Page geçiş animasyonları
-- [ ] API response times
-- [ ] Memory usage
-- [ ] Battery consumption
-
-## 🚀 Production Test
-
-### APK Build (Android)
+### ✅ Android Emulator PATH Sorunu
+**Problem:** `emulator` komutu bulunamıyor
+**Çözüm:** Android SDK environment variables ayarlandı
 ```bash
-# EAS CLI kurulum
-npm install -g @expo/eas-cli
-
-# Build profili oluştur
-eas build:configure
-
-# APK build
-eas build --platform android --profile preview
+export ANDROID_SDK_ROOT=~/Library/Android/sdk
+export PATH=$PATH:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools
 ```
 
-### IPA Build (iOS)
+### ✅ Expo Port Çakışması
+**Problem:** Port 8081 kullanımda
+**Çözüm:** Port 8082 kullanımı kabul edildi
 ```bash
-# iOS build (Apple Developer hesabı gerekli)
-eas build --platform ios --profile preview
+# Expo otomatik olarak alternatif port önerdi
+✔ Use port 8082 instead? … yes ✅
 ```
 
-## 📱 Fiziksel Device Test
-
-### Android Device
+### ✅ Supabase Database Bağlantısı
+**Problem:** Database connection hatası
+**Çözüm:** Doğru Supabase credentials ile bağlantı sağlandı
 ```bash
-# USB debugging'i etkinleştirin
-# Settings > Developer Options > USB Debugging
-
-# Device'ı bağlayın ve kontrol edin
-adb devices
-
-# Uygulamayı device'a yükleyin
-npx expo run:android --device
+# Working configuration:
+DATABASE_URL=jdbc:postgresql://aws-0-eu-north-1.pooler.supabase.com:6543/postgres
+DB_USER=postgres.irwytzimorfljkuugcfa
+DB_PASSWORD=Ep*2857088*
 ```
 
-### iOS Device
+## 🚀 Hızlı Başlangıç (Son Durum)
+
+### Tüm Sistem Başlatma
 ```bash
-# Device'ı Xcode'a kaydedin
-# Window > Devices and Simulators
+# 1. Backend başlat (Terminal 1)
+cd mobile_backend
+mvn spring-boot:run
 
-# Uygulamayı device'a yükleyin
-npx expo run:ios --device
+# 2. Android emulator başlat (Terminal 2)
+export ANDROID_SDK_ROOT=~/Library/Android/sdk
+export PATH=$PATH:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools
+emulator -avd Pixel_7 &
+
+# 3. Frontend başlat (Terminal 3)
+cd mobile_frontend
+npx expo start --android
+
+# 4. Test et
+adb devices  # emulator-5554 device görünmeli
+curl http://localhost:8080/api/mobile/actuator/health  # UP status
 ```
 
-## 📋 Test Raporu Formatı
+## 📊 Mevcut Test Status
 
-```markdown
-## Test Raporu - [Tarih]
+### System Status ✅
+- [x] Backend Health: UP
+- [x] Database: Connected (Supabase)
+- [x] Android Emulator: Running (Pixel_7)
+- [x] Expo Server: Running (Port 8082)
+- [x] ADB Connection: Active
+- [ ] iOS Simulator: Pending
+- [ ] App Testing: In Progress
 
-### Test Ortamı
-- Device: [iPhone 15 Pro Simulator / Pixel 7 Emulator]
-- OS Version: [iOS 17.0 / Android 14]
-- App Version: v1.0.0
-
-### Test Sonuçları
-#### Functional Tests
-- ✅ Login/Authentication: PASS
-- ✅ Vehicle Listing: PASS
-- ❌ Map Integration: FAIL (API Error)
-- ✅ Profile Management: PASS
-
-#### Performance Tests
-- App Launch: 2.3s ✅
-- API Response: 1.2s ✅
-- Memory Usage: 45MB ✅
-
-#### Issues Found
-1. Map API integration error
-2. Search filter not working properly
-3. Loading spinner sometimes freezes
-
-### Action Items
-- [ ] Fix map API endpoint
-- [ ] Debug search filter logic
-- [ ] Optimize loading states
-```
+### Environment Configuration ✅
+- [x] Android SDK Path: Configured
+- [x] Java/Maven: Working
+- [x] Node.js/npm: Compatible
+- [x] Expo CLI: Installed
+- [x] Database Credentials: Valid
 
 ## 🔧 Debug Araçları
+
+### Android Emulator Debug
+```bash
+# Emulator durumu
+adb devices
+adb shell getprop ro.build.version.release
+
+# Log monitoring
+adb logcat | grep -i "expo\|react"
+
+# Screen recording
+adb shell screenrecord /sdcard/test.mp4
+```
 
 ### Expo Developer Tools
 ```bash
 # Debug menüsü açmak için device'ı shake edin
 # veya emülatörde Cmd+D (iOS) / Ctrl+M (Android)
 
-# Kullanılabilir options:
-# - Reload
-# - Debug Remote JS
-- Performance Monitor
-# - Inspector
-# - Fast Refresh
+# Available options:
+# - Reload ✅
+# - Debug Remote JS ✅
+# - Performance Monitor ✅
+# - Inspector ✅
+# - Fast Refresh ✅
 ```
 
-### React Native Debugger
+### API Testing Tools
 ```bash
-# React Native Debugger kurulum
-npm install --global react-native-debugger
+# cURL testleri
+curl -X GET http://localhost:8080/api/mobile/vehicles \
+  -H "Content-Type: application/json"
 
-# Başlatma
-react-native-debugger
-```
-
-### API Testing
-```bash
-# Postman Collection import
-# Backend > docs > RenTesla-Mobile-API.postman_collection.json
-
-# HTTPie ile test
+# HTTPie (daha kullanıcı dostu)
 http GET localhost:8080/api/mobile/vehicles
+
+# Backend API documentation
+open http://localhost:8080/api/mobile/swagger-ui.html
 ```
 
-## 📞 Destek
+## 📱 CLI Emulator Commands
+
+### Android CLI Commands
+```bash
+# Tüm emülatörleri listele
+emulator -list-avds
+
+# Emulator başlat (headless)
+emulator -avd Pixel_7 -no-window -no-audio &
+
+# Emulator başlat (GPU acceleration)
+emulator -avd Pixel_7 -gpu host &
+
+# Device özellikleri
+adb shell getprop | grep "model\|brand\|version"
+
+# Apps listesi
+adb shell pm list packages
+
+# App install
+adb install app.apk
+
+# App uninstall
+adb uninstall com.rentesla.mobile
+```
+
+### iOS Simulator CLI Commands
+```bash
+# Simulators listesi
+xcrun simctl list devices
+
+# Simulator başlat
+xcrun simctl boot "iPhone 15 Pro"
+open -a Simulator
+
+# App install
+xcrun simctl install booted path/to/app.app
+
+# Screenshot
+xcrun simctl io booted screenshot screenshot.png
+
+# Video recording
+xcrun simctl io booted recordVideo video.mov
+```
+
+## 🏁 Production Deployment Test
+
+### Android APK Build
+```bash
+# EAS CLI setup
+npm install -g @expo/eas-cli
+eas login
+
+# Build configuration
+eas build:configure
+
+# Development build
+eas build --platform android --profile development
+
+# Production build
+eas build --platform android --profile production
+```
+
+### iOS IPA Build
+```bash
+# iOS build (Apple Developer account required)
+eas build --platform ios --profile development
+
+# TestFlight upload
+eas submit --platform ios
+```
+
+## 📋 Son Test Raporu
+
+```markdown
+## Test Raporu - [Güncel Tarih]
+
+### Test Ortamı ✅
+- Backend: Spring Boot 3.2.1 (Port 8080)
+- Database: Supabase PostgreSQL (aws-0-eu-north-1)
+- Frontend: React Native + Expo (Port 8082)
+- Android Emulator: Pixel_7 (API Level 34)
+- Host OS: macOS 14.5.0
+
+### Başarılı Testler ✅
+- [x] Backend Health Check: PASS
+- [x] Database Connection: PASS (Supabase)
+- [x] Android Emulator: PASS (Running)
+- [x] Expo Metro Bundler: PASS (Port 8082)
+- [x] ADB Device Detection: PASS
+- [x] API Endpoints: AVAILABLE
+
+### Bekleyen Testler 🔄
+- [ ] iOS Simulator Testing
+- [ ] App UI/UX Testing
+- [ ] API Integration Testing
+- [ ] Performance Testing
+- [ ] Production Build Testing
+
+### Bilinen Sorunlar ✅ (Çözüldü)
+1. ~~Android SDK PATH not found~~ → Fixed
+2. ~~Expo port conflict (8081)~~ → Using 8082
+3. ~~Database connection error~~ → Supabase working
+4. ~~Emulator not starting~~ → Pixel_7 running
+
+### Action Items
+- [ ] Complete iOS simulator setup
+- [ ] Run comprehensive app testing
+- [ ] Verify all API endpoints with mobile app
+- [ ] Performance optimization testing
+```
+
+## 📞 Destek ve Dokümantasyon
+
+### Quick Reference
+- **Backend Health:** http://localhost:8080/api/mobile/actuator/health
+- **API Docs:** http://localhost:8080/api/mobile/swagger-ui.html
+- **Expo DevTools:** http://localhost:8082
+- **Android Emulator:** Pixel_7 (emulator-5554)
 
 ### Teknik Sorunlar
-- Repository Issues: [GitHub Issues Link]
+- Repository Issues: GitHub Issues
 - Email: tech@rentesla.com
 - Slack: #rentesla-mobile-support
 
-### Dokümantasyon
-- API Docs: http://localhost:8080/api/mobile/swagger-ui.html
+### Yararlı Linkler
 - React Native Docs: https://reactnative.dev/
 - Expo Docs: https://docs.expo.dev/
+- Android Studio: https://developer.android.com/studio
+- Supabase Docs: https://supabase.com/docs
 
 ---
 
-**Not:** Bu rehber sürekli güncellenmektedir. En son versiyonu için repository'yi kontrol edin. 
+**Son Güncelleme:** [Güncel Tarih] - Android emulator çalışıyor, backend aktif, Expo başlatıldı ✅ 
