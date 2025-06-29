@@ -24,21 +24,19 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
-                // Public endpoints - ORDER MATTERS!
-                .requestMatchers("/api/mobile/auth/**").permitAll()
-                .requestMatchers("/api/mobile/actuator/**").permitAll()
-                .requestMatchers("/api/mobile/swagger-ui/**").permitAll()
-                .requestMatchers("/api/mobile/swagger-ui.html").permitAll()
-                .requestMatchers("/api/mobile/api-docs/**").permitAll()
-                .requestMatchers("/api/mobile/v3/api-docs/**").permitAll()
-                .requestMatchers("/swagger-ui/**").permitAll()
-                .requestMatchers("/api-docs/**").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
+                // Public endpoints - only auth and basic info
                 .requestMatchers("/auth/**").permitAll()
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/swagger-ui/**").permitAll()
+                .requestMatchers("/swagger-ui.html").permitAll()
+                .requestMatchers("/api-docs/**").permitAll()
+                .requestMatchers("/v3/api-docs/**").permitAll()
                 
-                // Protected endpoints - require authentication
-                .requestMatchers("/api/mobile/vehicles/**").authenticated()
-                .requestMatchers("/api/mobile/users/**").authenticated()
+                // All other endpoints require authentication
+                .requestMatchers("/consents/**").authenticated()
+                .requestMatchers("/documents/**").authenticated()
+                .requestMatchers("/vehicles/**").authenticated()
+                .requestMatchers("/users/**").authenticated()
                 
                 // All other requests require authentication
                 .anyRequest().authenticated()

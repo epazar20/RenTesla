@@ -7,11 +7,11 @@ spring:
   application:
     name: rentesla-mobile-backend
   
-  # Database Configuration (Supabase PostgreSQL - Corrected)
+  # Database Configuration (Docker PostgreSQL)
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://aws-0-eu-north-1.pooler.supabase.com:6543/postgres}
-    username: ${DB_USER:postgres.irwytzimorfljkuugcfa}
-    password: ${DB_PASSWORD:Ep*2857088*}
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/rentesla}
+    username: ${DB_USER:rentesla_user}
+    password: ${DB_PASSWORD:rentesla_password}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -20,6 +20,16 @@ spring:
       connection-timeout: 20000
       validation-timeout: 5000
       leak-detection-threshold: 60000
+      max-lifetime: 1800000  # 30 minutes
+      connection-test-query: SELECT 1
+      pool-name: RenTeslaHikariCP
+      # PostgreSQL specific settings
+      data-source-properties:
+        cachePrepStmts: true
+        useServerPrepStmts: true
+        reWriteBatchedInserts: true
+        socketTimeout: 30
+        tcpKeepAlive: true
   
   # JPA Configuration
   jpa:

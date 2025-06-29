@@ -4,14 +4,16 @@ public class AuthResponse {
     
     private String token;
     private String type = "Bearer";
+    private Long userId;
     private String username;
     private String role;
     private Long expiresIn;
     
     public AuthResponse() {}
     
-    public AuthResponse(String token, String username, String role, Long expiresIn) {
+    public AuthResponse(String token, Long userId, String username, String role, Long expiresIn) {
         this.token = token;
+        this.userId = userId;
         this.username = username;
         this.role = role;
         this.expiresIn = expiresIn;
@@ -31,6 +33,14 @@ public class AuthResponse {
     
     public void setType(String type) {
         this.type = type;
+    }
+    
+    public Long getUserId() {
+        return userId;
+    }
+    
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
     
     public String getUsername() {

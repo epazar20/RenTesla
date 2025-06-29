@@ -47,6 +47,26 @@ public class User extends BaseEntity {
     @Column(name = "tesla_email")
     private String teslaEmail;
 
+    // PRD: New fields for document verification and location
+    @Column(name = "document_verified", nullable = false)
+    private Boolean documentVerified = false;
+
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
+    @Column(name = "kyck_consent_given", nullable = false)
+    private Boolean kvkkConsentGiven = false;
+
+    @Column(name = "open_consent_given", nullable = false)
+    private Boolean openConsentGiven = false;
+
+    @Size(max = 100)
+    @Column(name = "fcm_token")
+    private String fcmToken;
+
     // Constructors
     public User() {}
 
@@ -128,6 +148,55 @@ public class User extends BaseEntity {
 
     public void setTeslaEmail(String teslaEmail) {
         this.teslaEmail = teslaEmail;
+    }
+
+    // PRD: New getters and setters
+    public Boolean getDocumentVerified() {
+        return documentVerified;
+    }
+
+    public void setDocumentVerified(Boolean documentVerified) {
+        this.documentVerified = documentVerified;
+    }
+
+    public Double getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+    }
+
+    public Double getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
+    }
+
+    public Boolean getKvkkConsentGiven() {
+        return kvkkConsentGiven;
+    }
+
+    public void setKvkkConsentGiven(Boolean kvkkConsentGiven) {
+        this.kvkkConsentGiven = kvkkConsentGiven;
+    }
+
+    public Boolean getOpenConsentGiven() {
+        return openConsentGiven;
+    }
+
+    public void setOpenConsentGiven(Boolean openConsentGiven) {
+        this.openConsentGiven = openConsentGiven;
+    }
+
+    public String getFcmToken() {
+        return fcmToken;
+    }
+
+    public void setFcmToken(String fcmToken) {
+        this.fcmToken = fcmToken;
     }
 
     public String getFullName() {

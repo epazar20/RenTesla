@@ -23,6 +23,7 @@ class AuthService {
         await this.storeAuthData(response);
         this.token = response.token;
         this.user = {
+          userId: response.userId || 1, // Default to 1 for now
           username: response.username,
           role: response.role
         };
@@ -34,7 +35,69 @@ class AuthService {
       }
     } catch (error) {
       console.error('❌ Login failed:', error);
-      throw error;
+      
+      // Handle structured error responses
+      if (error.response?.data?.code) {
+        const errorData = error.response.data;
+        throw new Error(this.getErrorMessage(errorData.code, errorData.message));
+      }
+      
+      // Handle HTTP status codes
+      if (error.response?.status === 401) {
+        throw new Error('Invalid username or password');
+      } else if (error.response?.status === 500) {
+        throw new Error('Server error. Please try again later.');
+      }
+      
+      throw new Error(error.message || 'Login failed. Please try again.');
+    }
+  }
+
+  // Signup with user data
+  async signup(userData) {
+    try {
+      const response = await apiService.post('/auth/signup', {
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        email: userData.email,
+        phoneNumber: userData.phoneNumber,
+        password: userData.password,
+        consents: userData.consents || {},
+        permissions: userData.permissions || {}
+      });
+
+      if (response.token) {
+        // Store token and user data
+        await this.storeAuthData(response);
+        this.token = response.token;
+        this.user = {
+          userId: response.userId,
+          username: response.username,
+          role: response.role
+        };
+
+        console.log('✅ Signup successful:', response.username);
+        return response;
+      } else {
+        throw new Error('Invalid signup response');
+      }
+    } catch (error) {
+      console.error('❌ Signup failed:', error);
+      
+      // Handle structured error responses
+      if (error.response?.data?.code) {
+        const errorData = error.response.data;
+        throw new Error(this.getErrorMessage(errorData.code, errorData.message));
+      }
+      
+      // Handle HTTP status codes
+      if (error.response?.status === 400) {
+        throw new Error('Please check your information and try again');
+      } else if (error.response?.status === 500) {
+        throw new Error('Server error. Please try again later.');
+      }
+      
+      throw new Error(error.message || 'Registration failed. Please try again.');
     }
   }
 
@@ -60,6 +123,7 @@ class AuthService {
     try {
       await SecureStore.setItemAsync(TOKEN_KEY, authData.token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify({
+        userId: authData.userId || 1, // Default to 1 for now
         username: authData.username,
         role: authData.role,
         expiresIn: authData.expiresIn
@@ -105,6 +169,17 @@ class AuthService {
     }
   }
 
+  // Get current user (alias for getUser for compatibility)
+  async getCurrentUser() {
+    return await this.getUser();
+  }
+
+  // Get current user ID
+  async getCurrentUserId() {
+    const user = await this.getUser();
+    return user ? user.userId : null;
+  }
+
   // Check if user is authenticated
   async isAuthenticated() {
     const token = await this.getToken();
@@ -139,6 +214,21 @@ class AuthService {
       };
     }
     return {};
+  }
+
+  // Get user-friendly error messages
+  getErrorMessage(code, defaultMessage) {
+    const errorMessages = {
+      'EMAIL_EXISTS': 'An account with this email already exists',
+      'KVKK_CONSENT_REQUIRED': 'KVKK consent is required to create an account',
+      'OPEN_CONSENT_REQUIRED': 'Data processing consent is required to create an account',
+      'VALIDATION_ERROR': 'Please check your information and try again',
+      'INVALID_CREDENTIALS': 'Invalid username or password',
+      'ACCOUNT_DISABLED': 'Your account has been disabled. Please contact support.',
+      'INTERNAL_ERROR': 'Server error. Please try again later.'
+    };
+    
+    return errorMessages[code] || defaultMessage || 'An error occurred. Please try again.';
   }
 }
 

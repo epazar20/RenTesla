@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -17,45 +17,38 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.rentesla.mobile"
+      "bundleIdentifier": "com.rentesla.mobile",
+      "config": {
+        "googleMapsApiKey": "AIzaSyC7QWTyi-H4F770oFNIMiD5FG5V2529XIU"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to location to show nearby vehicles on the map.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to location to show nearby vehicles on the map."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a1a1a"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.rentesla.mobile",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC7QWTyi-H4F770oFNIMiD5FG5V2529XIU"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
     "plugins": [
-      "expo-location",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34,
-            "buildToolsVersion": "34.0.0"
-          },
-          "ios": {
-            "deploymentTarget": "15.1"
-          }
-        }
-      ]
+      "expo-location"
     ],
-    "scheme": "rentesla",
-    "extra": {
-      "eas": {
-        "projectId": "your-eas-project-id"
-      }
-    }
+    "scheme": "rentesla"
   }
 }

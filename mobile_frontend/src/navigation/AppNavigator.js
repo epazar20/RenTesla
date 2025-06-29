@@ -9,9 +9,13 @@ import { View, ActivityIndicator, StyleSheet, AppState } from 'react-native';
 import HomeScreen from '../screens/HomeScreen';
 import VehiclesScreen from '../screens/VehiclesScreen';
 import VehicleDetailScreen from '../screens/VehicleDetailScreen';
+import VehicleListingScreen from '../screens/VehicleListingScreen';
+import QRScannerScreen from '../screens/QRScannerScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import DocumentUploadScreen from '../screens/DocumentUploadScreen';
 import MapScreen from '../screens/MapScreen';
 import LoginScreen from '../screens/LoginScreen';
+import SignupScreen from '../screens/SignupScreen';
 
 // Import services
 import AuthService from '../services/authService';
@@ -29,6 +33,19 @@ const VehicleStack = () => {
         options={{ title: 'Available Vehicles' }}
       />
       <Stack.Screen 
+        name="VehicleListing" 
+        component={VehicleListingScreen}
+        options={{ title: 'Vehicle Listing' }}
+      />
+      <Stack.Screen 
+        name="QRScanner" 
+        component={QRScannerScreen}
+        options={{ 
+          title: 'QR Scanner',
+          headerShown: false 
+        }}
+      />
+      <Stack.Screen 
         name="VehicleDetail" 
         component={VehicleDetailScreen}
         options={{ title: 'Vehicle Details' }}
@@ -37,11 +54,32 @@ const VehicleStack = () => {
   );
 };
 
-// Main Tab Navigator
-const TabNavigator = ({ onAuthStateChange }) => {
-  // Pass auth state change handler to ProfileScreen
+// Profile Stack Navigator
+const ProfileStack = ({ onAuthStateChange }) => {
   const ProfileScreenWithAuth = (props) => (
     <ProfileScreen {...props} onAuthStateChange={onAuthStateChange} />
+  );
+
+  return (
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="ProfileMain" 
+        component={ProfileScreenWithAuth}
+        options={{ title: 'Profile' }}
+      />
+      <Stack.Screen 
+        name="Documents" 
+        component={DocumentUploadScreen}
+        options={{ title: 'Document Upload' }}
+      />
+    </Stack.Navigator>
+  );
+};
+
+// Main Tab Navigator
+const TabNavigator = ({ onAuthStateChange }) => {
+  const ProfileStackWithAuth = (props) => (
+    <ProfileStack {...props} onAuthStateChange={onAuthStateChange} />
   );
 
   return (
@@ -62,7 +100,7 @@ const TabNavigator = ({ onAuthStateChange }) => {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#e60012',
+        tabBarActiveTintColor: '#3498DB',
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: {
           backgroundColor: '#fff',
@@ -95,8 +133,8 @@ const TabNavigator = ({ onAuthStateChange }) => {
       />
       <Tab.Screen 
         name="Profile" 
-        component={ProfileScreenWithAuth}
-        options={{ title: 'Profile' }}
+        component={ProfileStackWithAuth}
+        options={{ headerShown: false }}
       />
     </Tab.Navigator>
   );
@@ -108,9 +146,14 @@ const AuthStack = ({ onAuthStateChange }) => {
     <LoginScreen {...props} onAuthStateChange={onAuthStateChange} />
   );
 
+  const SignupScreenWithAuth = (props) => (
+    <SignupScreen {...props} onAuthStateChange={onAuthStateChange} />
+  );
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Login" component={LoginScreenWithAuth} />
+      <Stack.Screen name="Signup" component={SignupScreenWithAuth} />
     </Stack.Navigator>
   );
 };
@@ -118,7 +161,7 @@ const AuthStack = ({ onAuthStateChange }) => {
 // Loading Component
 const LoadingScreen = () => (
   <View style={styles.loadingContainer}>
-    <ActivityIndicator size="large" color="#e60012" />
+    <ActivityIndicator size="large" color="#3498DB" />
   </View>
 );
 
@@ -178,10 +221,10 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer>
-      {isAuthenticated ? (
-        <TabNavigator onAuthStateChange={handleAuthStateChange} />
-      ) : (
+      {!isAuthenticated ? (
         <AuthStack onAuthStateChange={handleAuthStateChange} />
+      ) : (
+        <TabNavigator onAuthStateChange={handleAuthStateChange} />
       )}
     </NavigationContainer>
   );
@@ -192,7 +235,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8F9FA',
   },
 });
 

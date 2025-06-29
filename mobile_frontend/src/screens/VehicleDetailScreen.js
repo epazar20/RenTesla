@@ -6,11 +6,30 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 const VehicleDetailScreen = ({ route, navigation }) => {
-  const { vehicle } = route.params;
+  // Null check for route params
+  const vehicle = route?.params?.vehicle;
+  
+  // If no vehicle data, show error screen
+  if (!vehicle) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="car-outline" size={64} color="#ccc" />
+        <Text style={styles.errorTitle}>Araç Bulunamadı</Text>
+        <Text style={styles.errorText}>Araç bilgileri yüklenemedi</Text>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>Geri Dön</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const getBatteryColor = (level) => {
     if (level >= 80) return '#4CAF50';
@@ -29,18 +48,18 @@ const VehicleDetailScreen = ({ route, navigation }) => {
 
   const handleRentVehicle = () => {
     if (vehicle.status !== 'AVAILABLE') {
-      Alert.alert('Unavailable', 'This vehicle is not available for rent at the moment.');
+      Alert.alert('Müsait Değil', 'Bu araç şu anda kiralama için müsait değil.');
       return;
     }
     
     Alert.alert(
-      'Rent Vehicle',
-      `Would you like to rent ${vehicle.displayName}?`,
+      'Araç Kirala',
+      `${vehicle.displayName || 'Bu aracı'} kiralamak istiyor musunuz?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'İptal', style: 'cancel' },
         { 
-          text: 'Rent Now', 
-          onPress: () => Alert.alert('Success', 'Rental process will be implemented soon!'),
+          text: 'Kirala', 
+          onPress: () => Alert.alert('Başarılı', 'Kiralama işlemi yakında uygulanacak!'),
           style: 'default'
         }
       ]
@@ -53,7 +72,7 @@ const VehicleDetailScreen = ({ route, navigation }) => {
         <Ionicons name={icon} size={20} color={color || '#666'} />
         <Text style={styles.detailLabel}>{label}</Text>
       </View>
-      <Text style={[styles.detailValue, color && { color }]}>{value}</Text>
+      <Text style={[styles.detailValue, color && { color }]}>{value || 'Bilgi yok'}</Text>
     </View>
   );
 
@@ -63,33 +82,35 @@ const VehicleDetailScreen = ({ route, navigation }) => {
       <View style={styles.headerCard}>
         <View style={styles.vehicleHeader}>
           <View style={styles.vehicleInfo}>
-            <Text style={styles.vehicleName}>{vehicle.displayName}</Text>
+            <Text style={styles.vehicleName}>
+              {vehicle.displayName || `${vehicle.make || ''} ${vehicle.model || 'Araç'}`}
+            </Text>
             <Text style={styles.vehicleModel}>{vehicle.model || 'Tesla'}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(vehicle.status) }]}>
-            <Text style={styles.statusText}>{vehicle.status}</Text>
+            <Text style={styles.statusText}>{vehicle.status || 'UNKNOWN'}</Text>
           </View>
         </View>
         
         <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>Daily Rate</Text>
-          <Text style={styles.priceValue}>₺{vehicle.dailyRate || 0}</Text>
+          <Text style={styles.priceLabel}>Günlük Ücret</Text>
+          <Text style={styles.priceValue}>₺{vehicle.dailyRate || vehicle.pricePerDay || 0}</Text>
         </View>
       </View>
 
       {/* Vehicle Details */}
       <View style={styles.detailsCard}>
-        <Text style={styles.sectionTitle}>Vehicle Information</Text>
+        <Text style={styles.sectionTitle}>Araç Bilgileri</Text>
         
         <DetailRow
           icon="car-outline"
-          label="Color"
-          value={vehicle.color || 'Not specified'}
+          label="Renk"
+          value={vehicle.color}
         />
         
         <DetailRow
           icon="battery-half-outline"
-          label="Battery Level"
+          label="Batarya Seviyesi"
           value={`${vehicle.batteryLevel || 0}%`}
           color={getBatteryColor(vehicle.batteryLevel)}
         />
@@ -102,32 +123,32 @@ const VehicleDetailScreen = ({ route, navigation }) => {
         
         <DetailRow
           icon="checkmark-circle-outline"
-          label="Availability"
-          value={vehicle.isAvailable ? 'Available' : 'Not Available'}
+          label="Müsaitlik"
+          value={vehicle.isAvailable ? 'Müsait' : 'Müsait Değil'}
           color={vehicle.isAvailable ? '#4CAF50' : '#F44336'}
         />
       </View>
 
       {/* Location Information */}
-      {(vehicle.latitude && vehicle.longitude) && (
+      {((vehicle.latitude && vehicle.longitude) || (vehicle.locationLat && vehicle.locationLng)) && (
         <View style={styles.detailsCard}>
-          <Text style={styles.sectionTitle}>Location Information</Text>
+          <Text style={styles.sectionTitle}>Konum Bilgileri</Text>
           
           <DetailRow
             icon="location-outline"
-            label="Address"
-            value={vehicle.locationAddress || 'Address not available'}
+            label="Adres"
+            value={vehicle.locationAddress}
           />
           
           <DetailRow
             icon="navigate-outline"
-            label="Coordinates"
-            value={`${vehicle.latitude}, ${vehicle.longitude}`}
+            label="Koordinatlar"
+            value={`${vehicle.latitude || vehicle.locationLat}, ${vehicle.longitude || vehicle.locationLng}`}
           />
           
           <TouchableOpacity style={styles.mapButton}>
             <Ionicons name="map-outline" size={20} color="#e60012" />
-            <Text style={styles.mapButtonText}>View on Map</Text>
+            <Text style={styles.mapButtonText}>Haritada Görüntüle</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -135,7 +156,7 @@ const VehicleDetailScreen = ({ route, navigation }) => {
       {/* Description */}
       {vehicle.description && (
         <View style={styles.detailsCard}>
-          <Text style={styles.sectionTitle}>Description</Text>
+          <Text style={styles.sectionTitle}>Açıklama</Text>
           <Text style={styles.descriptionText}>{vehicle.description}</Text>
         </View>
       )}
@@ -143,7 +164,7 @@ const VehicleDetailScreen = ({ route, navigation }) => {
       {/* Features */}
       {vehicle.features && (
         <View style={styles.detailsCard}>
-          <Text style={styles.sectionTitle}>Features</Text>
+          <Text style={styles.sectionTitle}>Özellikler</Text>
           <Text style={styles.featuresText}>{vehicle.features}</Text>
         </View>
       )}
@@ -167,13 +188,13 @@ const VehicleDetailScreen = ({ route, navigation }) => {
             styles.rentButtonText,
             vehicle.status !== 'AVAILABLE' && styles.disabledButtonText
           ]}>
-            {vehicle.status === 'AVAILABLE' ? 'Rent This Vehicle' : 'Not Available'}
+            {vehicle.status === 'AVAILABLE' ? 'Bu Aracı Kirala' : 'Müsait Değil'}
           </Text>
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.favoriteButton}>
           <Ionicons name="heart-outline" size={20} color="#e60012" />
-          <Text style={styles.favoriteButtonText}>Add to Favorites</Text>
+          <Text style={styles.favoriteButtonText}>Favorilere Ekle</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -184,6 +205,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 20,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#666',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  backButton: {
+    backgroundColor: '#3498DB',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
   },
   headerCard: {
     backgroundColor: '#fff',
@@ -208,12 +260,12 @@ const styles = StyleSheet.create({
   vehicleName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#2c3e50',
     marginBottom: 5,
   },
   vehicleModel: {
     fontSize: 16,
-    color: '#666',
+    color: '#7f8c8d',
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -221,19 +273,16 @@ const styles = StyleSheet.create({
     borderRadius: 15,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '600',
     color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   priceContainer: {
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
-    padding: 15,
   },
   priceLabel: {
     fontSize: 14,
-    color: '#666',
+    color: '#7f8c8d',
     marginBottom: 5,
   },
   priceValue: {
@@ -244,9 +293,9 @@ const styles = StyleSheet.create({
   detailsCard: {
     backgroundColor: '#fff',
     margin: 15,
-    borderRadius: 15,
     padding: 20,
-    elevation: 2,
+    borderRadius: 15,
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -255,16 +304,16 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#2c3e50',
     marginBottom: 15,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#ecf0f1',
   },
   detailLeft: {
     flexDirection: 'row',
@@ -273,79 +322,77 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 16,
-    color: '#666',
-    marginLeft: 12,
+    color: '#2c3e50',
+    marginLeft: 10,
   },
   detailValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    textAlign: 'right',
+    color: '#34495e',
   },
   mapButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
+    backgroundColor: '#ecf0f1',
     padding: 12,
+    borderRadius: 8,
     marginTop: 10,
   },
   mapButtonText: {
-    fontSize: 16,
     color: '#e60012',
     fontWeight: '600',
     marginLeft: 8,
   },
   descriptionText: {
     fontSize: 16,
-    color: '#666',
+    color: '#34495e',
     lineHeight: 24,
   },
   featuresText: {
     fontSize: 16,
-    color: '#666',
+    color: '#34495e',
     lineHeight: 24,
   },
   actionContainer: {
-    padding: 20,
-    paddingBottom: 40,
+    margin: 15,
+    marginBottom: 30,
   },
   rentButton: {
     backgroundColor: '#e60012',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 15,
-    padding: 16,
+    padding: 15,
+    borderRadius: 10,
     marginBottom: 10,
   },
   disabledButton: {
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#bdc3c7',
   },
   rentButtonText: {
+    color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
-    marginLeft: 8,
+    marginLeft: 10,
   },
   disabledButtonText: {
-    color: '#999',
+    color: '#7f8c8d',
   },
   favoriteButton: {
     backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 15,
-    padding: 16,
+    padding: 15,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: '#e60012',
   },
   favoriteButtonText: {
+    color: '#e60012',
     fontSize: 16,
     fontWeight: '600',
-    color: '#e60012',
     marginLeft: 8,
   },
 });

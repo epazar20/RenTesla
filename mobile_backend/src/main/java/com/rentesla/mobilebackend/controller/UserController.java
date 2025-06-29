@@ -142,4 +142,45 @@ public class UserController {
         boolean exists = userRepository.existsByPhone(phone);
         return ResponseEntity.ok(Map.of("exists", exists));
     }
+
+    @PutMapping("/{id}/location")
+    @Operation(summary = "Update user location", description = "Updates user's current location coordinates")
+    public ResponseEntity<User> updateUserLocation(
+            @Parameter(description = "User ID") @PathVariable Long id,
+            @RequestBody LocationUpdateRequest request) {
+        
+        Optional<User> optionalUser = userRepository.findById(id);
+        if (optionalUser.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        User user = optionalUser.get();
+        user.setLatitude(request.getLatitude());
+        user.setLongitude(request.getLongitude());
+        
+        User updatedUser = userRepository.save(user);
+        return ResponseEntity.ok(updatedUser);
+    }
+
+    // DTOs
+    public static class LocationUpdateRequest {
+        private Double latitude;
+        private Double longitude;
+
+        public Double getLatitude() {
+            return latitude;
+        }
+
+        public void setLatitude(Double latitude) {
+            this.latitude = latitude;
+        }
+
+        public Double getLongitude() {
+            return longitude;
+        }
+
+        public void setLongitude(Double longitude) {
+            this.longitude = longitude;
+        }
+    }
 } 

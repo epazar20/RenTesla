@@ -78,11 +78,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean isPublicEndpoint(String path) {
-        return path.startsWith("/api/mobile/auth/") ||
-               path.startsWith("/api/mobile/actuator/") ||
-               path.startsWith("/api/mobile/swagger-ui") ||
-               path.startsWith("/api/mobile/api-docs") ||
-               path.startsWith("/api/mobile/v3/api-docs") ||
-               path.equals("/api/mobile/swagger-ui.html");
+        // Remove context path prefix if present
+        String cleanPath = path;
+        if (path.startsWith("/api/mobile")) {
+            cleanPath = path.substring("/api/mobile".length());
+        }
+        
+        boolean isPublic = cleanPath.startsWith("/auth/") ||
+               cleanPath.equals("/actuator/health") ||
+               cleanPath.startsWith("/swagger-ui") ||
+               cleanPath.startsWith("/api-docs") ||
+               cleanPath.startsWith("/v3/api-docs") ||
+               cleanPath.equals("/swagger-ui.html");
+        
+        System.out.println("🔍 Checking path: " + path + " -> cleaned: " + cleanPath + " - isPublic: " + isPublic);
+        return isPublic;
     }
 } 

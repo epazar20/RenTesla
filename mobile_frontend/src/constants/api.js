@@ -15,7 +15,7 @@ const getBaseUrl = () => {
       console.log('🤖 Android Platform - Using URL:', androidUrl);
       return androidUrl;
     } else if (Platform.OS === 'ios') {
-      // iOS simulator can use localhost
+      // iOS - Use localhost with tunnel mode
       const iosUrl = 'http://localhost:8080/api/mobile';
       console.log('🍎 iOS Platform - Using URL:', iosUrl);
       return iosUrl;
@@ -50,9 +50,11 @@ export const ENDPOINTS = {
   VEHICLES: '/vehicles',
   VEHICLE_BY_ID: (id) => `/vehicles/${id}`,
   VEHICLE_SEARCH: '/vehicles/search',
-  VEHICLE_PRICE_RANGE: '/vehicles/price-range',
-  VEHICLES_WITH_LOCATION: '/vehicles/with-location',
   VEHICLE_STATS: '/vehicles/stats',
+  VEHICLE_PRICE_RANGE: '/vehicles/price-range',
+  VEHICLE_QR_SCAN: '/vehicles/qr-scan',
+  VEHICLE_NEARBY: '/vehicles/nearby',
+  VEHICLE_IN_BOUNDS: '/vehicles/in-bounds',
   
   // User endpoints
   USERS: '/users',
@@ -63,12 +65,24 @@ export const ENDPOINTS = {
   USER_STATS: '/users/stats',
   CHECK_EMAIL: '/users/check-email',
   CHECK_PHONE: '/users/check-phone',
+  USER_UPDATE_LOCATION: (id) => `/users/${id}/location`,
   
-  // Auth endpoints (if implemented later)
+  // Auth endpoints
   AUTH_LOGIN: '/auth/login',
-  AUTH_REGISTER: '/auth/register',
+  AUTH_SIGNUP: '/auth/signup',
   AUTH_REFRESH: '/auth/refresh',
   AUTH_LOGOUT: '/auth/logout',
+  
+  // Document endpoints  
+  DOCUMENTS: '/documents',
+  DOCUMENT_UPLOAD: '/documents/upload',
+  DOCUMENT_VERIFICATION_STATUS: (userId) => `/documents/user/${userId}/verification-status`,
+  DOCUMENT_REFRESH_STATUS: '/documents/refresh-status',
+  
+  // Consent endpoints
+  CONSENTS: '/consents',
+  CONSENT_BY_USER: (userId) => `/consents/user/${userId}`,
+  CONSENT_CREATE: '/consents',
 };
 
 // HTTP Status Codes

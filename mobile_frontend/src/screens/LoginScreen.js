@@ -113,6 +113,14 @@ const LoginScreen = ({ navigation, onAuthStateChange }) => {
             <Text style={styles.demoText}>Username: admin</Text>
             <Text style={styles.demoText}>Password: admin123</Text>
           </View>
+
+          {/* Signup Link */}
+          <View style={styles.signupContainer}>
+            <Text style={styles.signupText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+              <Text style={styles.signupLink}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -200,6 +208,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#2C5282',
     fontFamily: 'Courier New',
+  },
+  signupContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+  },
+  signupText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  signupLink: {
+    fontSize: 14,
+    color: '#E31E2E',
+    fontWeight: '600',
   },
 });
 

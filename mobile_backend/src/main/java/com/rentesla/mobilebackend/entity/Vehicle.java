@@ -6,14 +6,19 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Entity
 @Table(name = "vehicles")
 public class Vehicle extends BaseEntity {
 
     @Id
-    @Column(name = "vehicle_id")
-    private Long vehicleId;
+    @Column(name = "uuid", length = 36)
+    private String uuid = UUID.randomUUID().toString();
+
+    // Backward compatibility - keep old vehicle_id as tesla_vehicle_id
+    @Column(name = "tesla_vehicle_id")
+    private Long teslaVehicleId;
 
     @Column(name = "id")
     private Long id;
@@ -85,22 +90,79 @@ public class Vehicle extends BaseEntity {
     @Column(name = "features")
     private String features;
 
-    // Constructors
-    public Vehicle() {}
+    // PRD: New fields for enhanced vehicle management
+    @Column(name = "owner_id")
+    private Long ownerId;
 
-    public Vehicle(Long vehicleId, String vin, String displayName) {
-        this.vehicleId = vehicleId;
+    @Size(max = 50)
+    @Column(name = "make")
+    private String make;
+
+    @Size(max = 20)
+    @Column(name = "plate")
+    private String plate;
+
+    @Size(max = 50)
+    @Column(name = "category")
+    private String category;
+
+    @Column(name = "location_lat")
+    private Double locationLat;
+
+    @Column(name = "location_lng")
+    private Double locationLng;
+
+    @Column(name = "price_per_day", precision = 10, scale = 2)
+    private BigDecimal pricePerDay;
+
+    @Column(name = "qr_code_image", columnDefinition = "TEXT")
+    private String qrCodeImage;
+
+    @Column(name = "deposit_amount", precision = 10, scale = 2)
+    private BigDecimal depositAmount;
+
+    // Constructors
+    public Vehicle() {
+        this.uuid = UUID.randomUUID().toString();
+    }
+
+    public Vehicle(String vin, String displayName) {
+        this();
+        this.vin = vin;
+        this.displayName = displayName;
+    }
+
+    public Vehicle(Long teslaVehicleId, String vin, String displayName) {
+        this();
+        this.teslaVehicleId = teslaVehicleId;
         this.vin = vin;
         this.displayName = displayName;
     }
 
     // Getters and Setters
+    public String getUuid() {
+        return uuid;
+    }
+
+    public void setUuid(String uuid) {
+        this.uuid = uuid;
+    }
+
+    public Long getTeslaVehicleId() {
+        return teslaVehicleId;
+    }
+
+    public void setTeslaVehicleId(Long teslaVehicleId) {
+        this.teslaVehicleId = teslaVehicleId;
+    }
+
+    // Backward compatibility
     public Long getVehicleId() {
-        return vehicleId;
+        return teslaVehicleId;
     }
 
     public void setVehicleId(Long vehicleId) {
-        this.vehicleId = vehicleId;
+        this.teslaVehicleId = vehicleId;
     }
 
     public Long getId() {
@@ -255,13 +317,77 @@ public class Vehicle extends BaseEntity {
         this.features = features;
     }
 
-    // Convenience methods
-    public Long getTeslaVehicleId() {
-        return vehicleId;
+    // PRD: New getters and setters
+    public Long getOwnerId() {
+        return ownerId;
     }
 
-    public void setTeslaVehicleId(Long teslaVehicleId) {
-        this.vehicleId = teslaVehicleId;
+    public void setOwnerId(Long ownerId) {
+        this.ownerId = ownerId;
+    }
+
+    public String getMake() {
+        return make;
+    }
+
+    public void setMake(String make) {
+        this.make = make;
+    }
+
+    public String getPlate() {
+        return plate;
+    }
+
+    public void setPlate(String plate) {
+        this.plate = plate;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public Double getLocationLat() {
+        return locationLat;
+    }
+
+    public void setLocationLat(Double locationLat) {
+        this.locationLat = locationLat;
+    }
+
+    public Double getLocationLng() {
+        return locationLng;
+    }
+
+    public void setLocationLng(Double locationLng) {
+        this.locationLng = locationLng;
+    }
+
+    public BigDecimal getPricePerDay() {
+        return pricePerDay;
+    }
+
+    public void setPricePerDay(BigDecimal pricePerDay) {
+        this.pricePerDay = pricePerDay;
+    }
+
+    public String getQrCodeImage() {
+        return qrCodeImage;
+    }
+
+    public void setQrCodeImage(String qrCodeImage) {
+        this.qrCodeImage = qrCodeImage;
+    }
+
+    public BigDecimal getDepositAmount() {
+        return depositAmount;
+    }
+
+    public void setDepositAmount(BigDecimal depositAmount) {
+        this.depositAmount = depositAmount;
     }
 
     // Vehicle Status Enum

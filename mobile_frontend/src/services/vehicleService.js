@@ -25,11 +25,6 @@ export const vehicleService = {
     });
   },
 
-  // Get vehicles with location
-  getVehiclesWithLocation: async () => {
-    return await apiService.get(ENDPOINTS.VEHICLES_WITH_LOCATION);
-  },
-
   // Get vehicle statistics
   getVehicleStats: async () => {
     return await apiService.get(ENDPOINTS.VEHICLE_STATS);
