@@ -1,5 +1,12 @@
 import { Platform } from 'react-native';
 
+// Environment variables with fallback values
+const DEV_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL_DEVELOPMENT || 'http://192.168.1.214:8080/api/mobile';
+const PROD_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL_PRODUCTION || 'https://your-production-api.com/api/mobile';
+const IOS_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL_IOS || 'http://localhost:8080/api/mobile';
+const ANDROID_EMULATOR_URL = process.env.EXPO_PUBLIC_API_BASE_URL_ANDROID_EMULATOR || 'http://10.0.2.2:8080/api/mobile';
+const ANDROID_DEVICE_URL = process.env.EXPO_PUBLIC_API_BASE_URL_ANDROID_DEVICE || 'http://192.168.1.214:8080/api/mobile';
+
 // Get the appropriate base URL based on platform and environment
 const getBaseUrl = () => {
   if (__DEV__) {
@@ -7,27 +14,27 @@ const getBaseUrl = () => {
     if (Platform.OS === 'android') {
       // Android emulator - try multiple options
       // Option 1: Standard emulator localhost (comment out if not working)
-      // const androidUrl = 'http://10.0.2.2:8080/api/mobile';
+      // const androidUrl = ANDROID_EMULATOR_URL;
       
       // Option 2: If emulator is bridged, use local IP
-      const androidUrl = 'http://192.168.1.214:8080/api/mobile';
+      const androidUrl = ANDROID_DEVICE_URL;
       
       console.log('🤖 Android Platform - Using URL:', androidUrl);
       return androidUrl;
     } else if (Platform.OS === 'ios') {
       // iOS - Use localhost with tunnel mode
-      const iosUrl = 'http://localhost:8080/api/mobile';
+      const iosUrl = IOS_API_BASE_URL;
       console.log('🍎 iOS Platform - Using URL:', iosUrl);
       return iosUrl;
     } else {
       // For physical devices, use your local IP
-      const physicalUrl = 'http://192.168.1.214:8080/api/mobile';
+      const physicalUrl = DEV_API_BASE_URL;
       console.log('📱 Physical Device - Using URL:', physicalUrl);
       return physicalUrl;
     }
   } else {
     // Production environment
-    return 'https://your-production-api.com/api/mobile';
+    return PROD_API_BASE_URL;
   }
 };
 
@@ -41,8 +48,13 @@ export const API_CONFIG = {
   }
 };
 
-// Log the configuration
-console.log('🔧 API Configuration:', API_CONFIG);
+// Log the configuration (only in development)
+if (__DEV__) {
+  console.log('🔧 API Configuration:', {
+    ...API_CONFIG,
+    BASE_URL: API_CONFIG.BASE_URL.replace(/\/\/.*@/, '//***@') // Hide credentials if any
+  });
+}
 
 // API Endpoints
 export const ENDPOINTS = {

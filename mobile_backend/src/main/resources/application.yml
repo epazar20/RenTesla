@@ -61,6 +61,12 @@ jwt:
   secret: ${JWT_SECRET:your-jwt-secret-key-here-should-be-at-least-256-bits-long-secure-key}
   expiration: ${JWT_EXPIRATION:86400000} # 24 hours in milliseconds
 
+# Demo Admin Configuration (Remove in production!)
+demo:
+  admin:
+    username: ${DEMO_ADMIN_USERNAME:admin}
+    password: ${DEMO_ADMIN_PASSWORD:admin123}
+
 # API Documentation
 springdoc:
   api-docs:
@@ -120,6 +126,10 @@ app:
   
   # Tesla API Integration
   tesla-api:
-    base-url: http://localhost:8000
+    base-url: ${TESLA_API_BASE_URL:http://localhost:8000}
     timeout: 30000
+
+  # Frontend URL
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:3000}
 

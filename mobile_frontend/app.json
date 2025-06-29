@@ -19,7 +19,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.rentesla.mobile",
       "config": {
-        "googleMapsApiKey": "AIzaSyC7QWTyi-H4F770oFNIMiD5FG5V2529XIU"
+        "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to location to show nearby vehicles on the map.",
@@ -38,7 +38,7 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyC7QWTyi-H4F770oFNIMiD5FG5V2529XIU"
+          "apiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
         }
       }
     },

@@ -188,4 +188,228 @@ Bu proje MIT lisansı altında lisanslanmıştır.
 
 - **Proje**: RenTesla Mobile Backend
 - **Versiyon**: 1.0.0
-- **Geliştirici**: RenTesla Team 
+- **Geliştirici**: RenTesla Team
+
+## 🔐 Environment Setup
+
+Before running the application, you need to set up environment variables:
+
+### 1. Create Environment File
+```bash
+cp .env.example .env
+```
+
+### 2. Configure Environment Variables
+
+Edit the `.env` file with your actual values:
+
+```env
+# JWT Configuration (REQUIRED - Change in production!)
+JWT_SECRET=your-super-secure-jwt-secret-key-minimum-256-bits-long
+JWT_EXPIRATION=86400000
+
+# Database Configuration
+DATABASE_URL=jdbc:postgresql://localhost:5433/rentesla
+DB_USER=rentesla_user
+DB_PASSWORD=rentesla_password
+
+# Demo Admin Credentials (Remove in production!)
+DEMO_ADMIN_USERNAME=admin
+DEMO_ADMIN_PASSWORD=admin123
+
+# API URLs
+TESLA_API_BASE_URL=http://localhost:8000
+FRONTEND_URL=http://localhost:3000
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS=http://localhost:*,https://localhost:*,exp://*:*,http://192.168.*:*,https://192.168.*:*
+```
+
+### 3. Important Security Notes
+
+⚠️ **CRITICAL SECURITY REQUIREMENTS:**
+
+- **NEVER commit the `.env` file to version control!**
+- **Change JWT_SECRET to a secure random string in production**
+- **Remove demo admin credentials in production**
+- **Use strong database passwords**
+- **Configure proper CORS origins for production**
+
+## 🚀 Installation & Setup
+
+### Prerequisites
+- Java 17 or higher
+- Maven 3.6+
+- PostgreSQL 13+ (via Docker)
+- Docker & Docker Compose
+
+### Database Setup
+```bash
+# Start PostgreSQL with Docker Compose
+docker-compose up -d
+
+# Verify database is running
+docker-compose ps
+```
+
+### Install Dependencies & Run
+```bash
+# Install dependencies
+mvn clean install
+
+# Run the application
+mvn spring-boot:run
+```
+
+### Alternative: Run with Docker
+```bash
+# Build and run everything
+docker-compose up --build
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+All sensitive configuration is managed through environment variables:
+
+- **JWT_SECRET**: Must be at least 256 bits long
+- **Database credentials**: Never hardcode in application.yml
+- **Admin credentials**: For demo only, remove in production
+- **API endpoints**: Configurable for different environments
+
+### Database Configuration
+- Uses PostgreSQL via Docker
+- Connection pooling with HikariCP
+- Automatic schema updates with Hibernate
+
+### Security Configuration
+- JWT-based authentication
+- CORS configured for mobile app
+- No basic authentication (removed)
+- Secure headers and HTTPS ready
+
+## 📊 Database Schema
+
+### Tables
+- **users**: User management with roles
+- **vehicles**: Tesla vehicle inventory  
+- **rentals**: Rental transactions
+- **documents**: KYC document verification
+- **consents**: User consent management
+
+### Sample Data
+The application includes sample Tesla vehicles:
+- 8 Tesla models (Model S, 3, X, Y)
+- Location data for Istanbul area
+- Battery levels and pricing
+
+## 🛠️ API Endpoints
+
+### Authentication
+- `POST /auth/login` - User login
+- `POST /auth/signup` - User registration
+- `POST /auth/refresh` - Token refresh
+
+### Vehicles
+- `GET /vehicles` - List all vehicles
+- `GET /vehicles/{id}` - Get vehicle by ID
+- `GET /vehicles/search` - Search vehicles
+- `GET /vehicles/stats` - Vehicle statistics
+
+### Users
+- `GET /users` - List users (admin)
+- `GET /users/{id}` - Get user by ID
+- `PUT /users/{id}` - Update user
+- `GET /users/stats` - User statistics
+
+### Documents
+- `POST /documents/upload` - Upload documents
+- `GET /documents/user/{userId}/verification-status` - Check verification
+
+## 📖 API Documentation
+
+Swagger UI is available at:
+- **Development**: http://localhost:8080/api/mobile/swagger-ui.html
+- **API Docs**: http://localhost:8080/api/mobile/api-docs
+
+## 🧪 Testing
+
+### Health Check
+```bash
+curl http://localhost:8080/api/mobile/actuator/health
+```
+
+### Test Authentication
+```bash
+curl -X POST http://localhost:8080/api/mobile/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+```
+
+### Test Vehicle API
+```bash
+# Get auth token first, then:
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  http://localhost:8080/api/mobile/vehicles
+```
+
+## 🚨 Security Best Practices
+
+### Production Deployment
+1. **Environment Variables**: All secrets in `.env` file
+2. **JWT Secret**: Use cryptographically secure random string
+3. **Database**: Use strong passwords and SSL connections
+4. **HTTPS**: Enable SSL/TLS in production
+5. **CORS**: Restrict to your actual frontend domains
+6. **Logging**: Don't log sensitive data
+7. **Monitoring**: Set up application monitoring
+
+### Demo vs Production
+- **Demo**: Uses hardcoded admin credentials for testing
+- **Production**: Should use proper user management system
+
+## 🔍 Monitoring & Observability
+
+### Actuator Endpoints
+- `/actuator/health` - Application health
+- `/actuator/info` - Application info
+- `/actuator/metrics` - Metrics
+- `/actuator/prometheus` - Prometheus metrics
+
+### Logging
+- Structured logging with timestamp
+- Debug level for development
+- SQL logging for troubleshooting
+
+## 🐳 Docker Configuration
+
+### Services
+- **PostgreSQL**: Database
+- **Spring Boot App**: Backend API
+- **pgAdmin**: Database management (optional)
+
+### Environment Files
+Docker Compose reads from `.env` file automatically.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. **Create your own `.env` file** (don't commit it!)
+4. Make your changes
+5. Test thoroughly
+6. Submit a pull request
+
+### Development Guidelines
+- Follow Spring Boot best practices
+- Use environment variables for configuration
+- Write tests for new features
+- Document API changes in Swagger
+
+## 📄 License
+
+This project is proprietary software for RenTesla.
+
+---
+
+**⚠️ Security Reminder: Never commit sensitive information like passwords, API keys, or JWT secrets to version control!** 

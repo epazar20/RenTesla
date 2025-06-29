@@ -262,4 +262,165 @@ Bu proje MIT lisansı altında lisanslanmıştır.
 - 🔄 Push notifications
 - 🔄 Offline support
 - 🔄 Biometric authentication
-- 🔄 Payment integration 
+- 🔄 Payment integration
+
+## 🔐 Environment Setup
+
+Before running the application, you need to set up environment variables:
+
+### 1. Create Environment File
+```bash
+cp .env.example .env
+```
+
+### 2. Configure Environment Variables
+
+Edit the `.env` file with your actual values:
+
+```env
+# Google Maps API Key (Required)
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_actual_google_maps_api_key
+
+# API Configuration
+EXPO_PUBLIC_API_BASE_URL_DEVELOPMENT=http://your_local_ip:8080/api/mobile
+EXPO_PUBLIC_API_BASE_URL_PRODUCTION=https://your-production-api.com/api/mobile
+
+# iOS Development URL
+EXPO_PUBLIC_API_BASE_URL_IOS=http://localhost:8080/api/mobile
+
+# Android Development URLs
+EXPO_PUBLIC_API_BASE_URL_ANDROID_EMULATOR=http://10.0.2.2:8080/api/mobile
+EXPO_PUBLIC_API_BASE_URL_ANDROID_DEVICE=http://your_local_ip:8080/api/mobile
+
+# Demo Admin Credentials (Remove in production!)
+EXPO_PUBLIC_DEMO_ADMIN_USERNAME=admin
+EXPO_PUBLIC_DEMO_ADMIN_PASSWORD=admin123
+```
+
+### 3. Important Security Notes
+
+⚠️ **NEVER commit the `.env` file to version control!**
+
+- The `.env` file contains sensitive information like API keys
+- Only commit `.env.example` with placeholder values
+- Each developer should create their own `.env` file locally
+
+## 🚀 Installation & Setup
+
+### Prerequisites
+- Node.js (v16 or higher)
+- npm or yarn
+- Expo CLI
+- iOS Simulator (for iOS development)
+- Android Studio/Emulator (for Android development)
+
+### Install Dependencies
+```bash
+npm install
+```
+
+### Start Development Server
+```bash
+npx expo start
+```
+
+## 🗺️ Google Maps Setup
+
+1. Get a Google Maps API Key from [Google Cloud Console](https://console.cloud.google.com/)
+2. Enable the following APIs:
+   - Maps JavaScript API
+   - Places API (if needed)
+   - Geocoding API (if needed)
+3. Add your API key to the `.env` file
+4. Rebuild the app:
+   ```bash
+   npx expo run:ios    # for iOS
+   npx expo run:android # for Android
+   ```
+
+## 📱 Running the App
+
+### iOS Simulator
+```bash
+npx expo run:ios
+```
+
+### Android Emulator
+```bash
+npx expo run:android
+```
+
+### Physical Device
+Use Expo Go app and scan the QR code from `npx expo start`
+
+## 🔧 Configuration
+
+### API URLs
+- **Development**: Uses local IP address for device testing
+- **iOS Simulator**: Uses localhost
+- **Android Emulator**: Uses 10.0.2.2 (emulator localhost)
+- **Production**: Uses production API URL
+
+### Authentication
+- Demo admin login is available for testing
+- Real authentication should be implemented for production
+
+## 🎯 Features
+
+- **Vehicle Map**: Interactive map showing all available vehicles
+- **Authentication**: JWT-based authentication system  
+- **Vehicle Management**: Browse, search, and view vehicle details
+- **User Management**: User registration and profile management
+- **Document Upload**: KYC document verification system
+
+## 🛠️ Development
+
+### Project Structure
+```
+src/
+├── components/     # Reusable UI components
+├── screens/       # Screen components
+├── navigation/    # Navigation configuration
+├── services/      # API service layer
+├── constants/     # App constants and configuration
+└── utils/         # Utility functions
+```
+
+### Environment Variables
+All sensitive data is managed through environment variables:
+- API keys
+- API endpoints
+- Authentication credentials (demo only)
+
+## 🚨 Security Best Practices
+
+1. **Environment Variables**: All secrets are in `.env` file
+2. **API Keys**: Never hardcode API keys in source code
+3. **Authentication**: Use secure JWT tokens
+4. **Network**: Use HTTPS in production
+5. **Data Validation**: Validate all user inputs
+
+## 📖 API Documentation
+
+The backend API provides comprehensive endpoints for:
+- Vehicle management
+- User authentication
+- Document verification
+- Location services
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. **Create your own `.env` file** (don't commit it!)
+4. Make your changes
+5. Test thoroughly
+6. Submit a pull request
+
+## 📄 License
+
+This project is proprietary software for RenTesla.
+
+---
+
+**⚠️ Remember: Never commit sensitive information like API keys or passwords to version control!** 

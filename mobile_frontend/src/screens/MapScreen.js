@@ -17,6 +17,11 @@ import AuthService from '../services/authService';
 
 const { width, height } = Dimensions.get('window');
 
+// Environment variables with fallback values
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyC7QWTyi-H4F770oFNIMiD5FG5V2529XIU';
+const DEMO_ADMIN_USERNAME = process.env.EXPO_PUBLIC_DEMO_ADMIN_USERNAME || 'admin';
+const DEMO_ADMIN_PASSWORD = process.env.EXPO_PUBLIC_DEMO_ADMIN_PASSWORD || 'admin123';
+
 const MapScreen = ({ navigation }) => {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,8 +43,8 @@ const MapScreen = ({ navigation }) => {
         setAuthLoading(true);
         
         try {
-          // Auto-login as admin for demo/testing
-          await AuthService.login('admin', 'admin123');
+          // Auto-login as admin for demo/testing (use environment variables)
+          await AuthService.login(DEMO_ADMIN_USERNAME, DEMO_ADMIN_PASSWORD);
           console.log('✅ Admin login successful for map demo');
         } catch (error) {
           console.error('❌ Admin login failed:', error);
@@ -137,7 +142,7 @@ const MapScreen = ({ navigation }) => {
   };
 
   const generateMapHTML = () => {
-    const apiKey = 'AIzaSyC7QWTyi-H4F770oFNIMiD5FG5V2529XIU';
+    const apiKey = GOOGLE_MAPS_API_KEY;
     const center = userLocation ? `${userLocation.latitude},${userLocation.longitude}` : '41.0082,28.9784';
     
     const markers = vehicles.map(vehicle => {

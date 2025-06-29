@@ -39,6 +39,12 @@ public class AuthController {
     @Value("${jwt.expiration}")
     private Long jwtExpiration;
 
+    @Value("${demo.admin.username:admin}")
+    private String demoAdminUsername;
+
+    @Value("${demo.admin.password:change_this_password}")
+    private String demoAdminPassword;
+
     @PostMapping("/signup")
     @Operation(summary = "User registration", description = "Register new user account")
     public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest signupRequest) {
@@ -211,20 +217,18 @@ public class AuthController {
     public ResponseEntity<?> login(@Valid @RequestBody AuthRequest authRequest) {
         
         try {
-            // For demo purposes, we'll check against a simple admin user
-            // In production, you should use proper password encoding/hashing
-            if ("admin".equals(authRequest.getUsername()) && "admin123".equals(authRequest.getPassword())) {
+            // Demo admin login (remove in production)
+            if (demoAdminUsername.equals(authRequest.getUsername()) && demoAdminPassword.equals(authRequest.getPassword())) {
+                // Create demo admin JWT token
                 String token = jwtService.generateToken(authRequest.getUsername(), "ADMIN");
                 
-                AuthResponse authResponse = new AuthResponse(
+                return ResponseEntity.ok(new AuthResponse(
                     token, 
                     1L, // Admin user ID
                     authRequest.getUsername(), 
                     "ADMIN",
                     jwtExpiration / 1000 // convert to seconds
-                );
-                
-                return ResponseEntity.ok(authResponse);
+                ));
             }
             
             // Check database users
