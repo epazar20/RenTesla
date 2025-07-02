@@ -11,7 +11,8 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { vehicleService } from '../services';
+import { useTranslation } from 'react-i18next';
+import { apiService } from '../services/apiService';
 
 const VehiclesScreen = ({ navigation }) => {
   const [vehicles, setVehicles] = useState([]);
@@ -19,6 +20,8 @@ const VehiclesScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  const { t } = useTranslation();
 
   useEffect(() => {
     loadVehicles();
@@ -30,12 +33,12 @@ const VehiclesScreen = ({ navigation }) => {
 
   const loadVehicles = async () => {
     try {
-      const data = await vehicleService.getAllVehicles();
+      const data = await apiService.getAllVehicles();
       console.log('📱 Vehicles loaded:', data);
       setVehicles(data || []);
     } catch (error) {
       console.error('Error loading vehicles:', error);
-      Alert.alert('Error', 'Failed to load vehicles');
+      Alert.alert(t('common.error'), t('errors.somethingWrong'));
       setVehicles([]);
     } finally {
       setLoading(false);
@@ -76,6 +79,15 @@ const VehiclesScreen = ({ navigation }) => {
     }
   };
 
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'AVAILABLE': return t('vehicles.available');
+      case 'RENTED': return t('vehicles.rented');  
+      case 'MAINTENANCE': return t('vehicles.maintenance');
+      default: return t('vehicles.available');
+    }
+  };
+
   const renderVehicleCard = ({ item }) => (
     <TouchableOpacity
       style={styles.vehicleCard}
@@ -83,11 +95,11 @@ const VehiclesScreen = ({ navigation }) => {
     >
       <View style={styles.vehicleHeader}>
         <View style={styles.vehicleInfo}>
-          <Text style={styles.vehicleName}>{item?.displayName || 'Unknown Vehicle'}</Text>
+          <Text style={styles.vehicleName}>{item?.displayName || t('vehicles.title')}</Text>
           <Text style={styles.vehicleModel}>{item?.model || 'Tesla'}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item?.status) }]}>
-          <Text style={styles.statusText}>{item?.status || 'UNKNOWN'}</Text>
+          <Text style={styles.statusText}>{getStatusText(item?.status)}</Text>
         </View>
       </View>
 
@@ -104,7 +116,7 @@ const VehiclesScreen = ({ navigation }) => {
 
         <View style={styles.detailItem}>
           <Ionicons name="cash-outline" size={16} color="#666" />
-          <Text style={styles.detailText}>₺{item?.dailyRate || 0}/day</Text>
+          <Text style={styles.detailText}>₺{item?.dailyRate || 0}/{t('vehicles.pricePerDay').toLowerCase()}</Text>
         </View>
 
         {item?.locationAddress && (
@@ -127,9 +139,9 @@ const VehiclesScreen = ({ navigation }) => {
   const EmptyState = () => (
     <View style={styles.emptyState}>
       <Ionicons name="car-outline" size={64} color="#ccc" />
-      <Text style={styles.emptyStateTitle}>No Vehicles Found</Text>
+      <Text style={styles.emptyStateTitle}>{t('vehicles.noVehiclesFound')}</Text>
       <Text style={styles.emptyStateText}>
-        {searchQuery ? 'Try adjusting your search terms' : 'No vehicles available at the moment'}
+        {searchQuery ? t('vehicles.searchVehicles') : t('vehicles.noVehiclesFound')}
       </Text>
     </View>
   );
@@ -142,7 +154,7 @@ const VehiclesScreen = ({ navigation }) => {
           <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search vehicles..."
+            placeholder={t('vehicles.searchVehicles')}
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor="#999"
@@ -158,7 +170,7 @@ const VehiclesScreen = ({ navigation }) => {
       {/* Results Count */}
       <View style={styles.resultsContainer}>
         <Text style={styles.resultsText}>
-          {filteredVehicles.length} vehicle{filteredVehicles.length !== 1 ? 's' : ''} found
+          {filteredVehicles.length} {t('vehicles.title').toLowerCase()} {t('vehicles.vehiclesNearby').toLowerCase()}
         </Text>
       </View>
 

@@ -41,6 +41,9 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     @Query("SELECT COUNT(d) FROM Document d WHERE d.status = :status")
     long countByStatus(@Param("status") Document.DocumentStatus status);
 
+    @Query("SELECT COUNT(d) FROM Document d WHERE d.autoApproved = :autoApproved")
+    long countByAutoApproved(@Param("autoApproved") Boolean autoApproved);
+
     @Query("SELECT COUNT(d) FROM Document d WHERE d.type = :type AND d.status = 'APPROVED'")
     long countApprovedByType(@Param("type") Document.DocumentType type);
 
@@ -64,4 +67,6 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     @Query("SELECT d FROM Document d WHERE d.ocrConfidence < :threshold AND d.status = 'PENDING'")
     List<Document> findDocumentsWithLowConfidence(@Param("threshold") Double threshold);
+
+    List<Document> findByUserIdAndTypeAndFace(Long userId, Document.DocumentType type, Document.DocumentFace face);
 } 

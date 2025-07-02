@@ -99,13 +99,27 @@ public class UserController {
         }
 
         User user = optionalUser.get();
+        
+        // Update only if the field is not null in the request
+        if (userDetails.getFirstName() != null) {
         user.setFirstName(userDetails.getFirstName());
+        }
+        if (userDetails.getLastName() != null) {
         user.setLastName(userDetails.getLastName());
+        }
+        if (userDetails.getEmail() != null) {
         user.setEmail(userDetails.getEmail());
+        }
+        if (userDetails.getPhone() != null) {
         user.setPhone(userDetails.getPhone());
+        }
+        if (userDetails.getAddress() != null) {
         user.setAddress(userDetails.getAddress());
-        user.setIsActive(userDetails.getIsActive());
-        user.setRole(userDetails.getRole());
+        }
+        if (userDetails.getTeslaEmail() != null) {
+            user.setTeslaEmail(userDetails.getTeslaEmail());
+        }
+        // Role and isActive should only be updated by admins, so we'll skip them here
 
         User updatedUser = userRepository.save(user);
         return ResponseEntity.ok(updatedUser);
@@ -162,6 +176,46 @@ public class UserController {
         return ResponseEntity.ok(updatedUser);
     }
 
+    @PutMapping("/{id}/notification-settings")
+    @Operation(summary = "Update notification settings", description = "Updates user's notification preferences")
+    public ResponseEntity<User> updateNotificationSettings(
+            @Parameter(description = "User ID") @PathVariable Long id,
+            @RequestBody NotificationSettingsRequest request) {
+        
+        Optional<User> optionalUser = userRepository.findById(id);
+        if (optionalUser.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        User user = optionalUser.get();
+        user.setNotificationRentalUpdates(request.getRentalUpdates());
+        user.setNotificationPromotions(request.getPromotions());
+        user.setNotificationSystemUpdates(request.getSystemUpdates());
+        
+        User updatedUser = userRepository.save(user);
+        return ResponseEntity.ok(updatedUser);
+    }
+
+    @PutMapping("/{id}/privacy-settings")
+    @Operation(summary = "Update privacy settings", description = "Updates user's privacy and security preferences")
+    public ResponseEntity<User> updatePrivacySettings(
+            @Parameter(description = "User ID") @PathVariable Long id,
+            @RequestBody PrivacySettingsRequest request) {
+        
+        Optional<User> optionalUser = userRepository.findById(id);
+        if (optionalUser.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        User user = optionalUser.get();
+        user.setShareLocation(request.getShareLocation());
+        user.setShareRentalHistory(request.getShareRentalHistory());
+        user.setTwoFactorAuthEnabled(request.getTwoFactorAuthEnabled());
+        
+        User updatedUser = userRepository.save(user);
+        return ResponseEntity.ok(updatedUser);
+    }
+
     // DTOs
     public static class LocationUpdateRequest {
         private Double latitude;
@@ -181,6 +235,67 @@ public class UserController {
 
         public void setLongitude(Double longitude) {
             this.longitude = longitude;
+        }
+    }
+
+    // DTOs for settings
+    public static class NotificationSettingsRequest {
+        private Boolean rentalUpdates;
+        private Boolean promotions;
+        private Boolean systemUpdates;
+
+        public Boolean getRentalUpdates() {
+            return rentalUpdates;
+        }
+
+        public void setRentalUpdates(Boolean rentalUpdates) {
+            this.rentalUpdates = rentalUpdates;
+        }
+
+        public Boolean getPromotions() {
+            return promotions;
+        }
+
+        public void setPromotions(Boolean promotions) {
+            this.promotions = promotions;
+        }
+
+        public Boolean getSystemUpdates() {
+            return systemUpdates;
+        }
+
+        public void setSystemUpdates(Boolean systemUpdates) {
+            this.systemUpdates = systemUpdates;
+        }
+    }
+
+    public static class PrivacySettingsRequest {
+        private Boolean shareLocation;
+        private Boolean shareRentalHistory;
+        private Boolean twoFactorAuthEnabled;
+
+        public Boolean getShareLocation() {
+            return shareLocation;
+        }
+
+        public void setShareLocation(Boolean shareLocation) {
+            this.shareLocation = shareLocation;
+        }
+
+        public Boolean getShareRentalHistory() {
+            return shareRentalHistory;
+        }
+
+        public void setShareRentalHistory(Boolean shareRentalHistory) {
+            this.shareRentalHistory = shareRentalHistory;
+        }
+
+        public Boolean getTwoFactorAuthEnabled() {
+            return twoFactorAuthEnabled;
+        }
+
+        public void setTwoFactorAuthEnabled(Boolean twoFactorAuthEnabled) {
+            this.twoFactorAuthEnabled = twoFactorAuthEnabled;
         }
     }
 } 

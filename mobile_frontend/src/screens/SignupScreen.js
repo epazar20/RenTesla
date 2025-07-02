@@ -16,14 +16,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import { useDispatch } from 'react-redux';
+import { setLoginSuccess } from '../store/slices/authSlice';
 import AuthService from '../services/authService';
+import { useTranslation } from 'react-i18next';
 
 const SignupScreen = ({ navigation, onAuthStateChange }) => {
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     phoneNumber: '',
+    identityNumber: '',
     password: '',
     confirmPassword: ''
   });
@@ -129,36 +136,43 @@ const SignupScreen = ({ navigation, onAuthStateChange }) => {
 
     // Form validation
     if (!formData.firstName.trim()) {
-      setFieldError('firstName', 'First name is required');
+      setFieldError('firstName', t('auth.firstNameRequired', 'First name is required'));
       isValid = false;
     }
     if (!formData.lastName.trim()) {
-      setFieldError('lastName', 'Last name is required');
+      setFieldError('lastName', t('auth.lastNameRequired', 'Last name is required'));
       isValid = false;
     }
     if (!formData.email.trim()) {
-      setFieldError('email', 'Email is required');
+      setFieldError('email', t('auth.emailRequired', 'Email is required'));
       isValid = false;
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      setFieldError('email', 'Please enter a valid email address');
+      setFieldError('email', t('auth.emailInvalid', 'Please enter a valid email address'));
+      isValid = false;
+    }
+    if (!formData.identityNumber.trim()) {
+      setFieldError('identityNumber', t('auth.identityNumberRequired'));
+      isValid = false;
+    } else if (formData.identityNumber.length < 10 || formData.identityNumber.length > 20) {
+      setFieldError('identityNumber', t('auth.identityNumberInvalid'));
       isValid = false;
     }
     if (formData.password.length < 6) {
-      setFieldError('password', 'Password must be at least 6 characters');
+      setFieldError('password', t('auth.passwordTooShort', 'Password must be at least 6 characters'));
       isValid = false;
     }
     if (formData.password !== formData.confirmPassword) {
-      setFieldError('confirmPassword', 'Passwords do not match');
+      setFieldError('confirmPassword', t('auth.passwordMismatch', 'Passwords do not match'));
       isValid = false;
     }
 
     // Consent validation
     if (!consents.kvkk) {
-      Alert.alert('Error', 'KVKK consent is required to register');
+      Alert.alert(t('common.error'), t('auth.kvkkRequired', 'KVKK consent is required to register'));
       isValid = false;
     }
     if (!consents.openConsent) {
-      Alert.alert('Error', 'Open consent for data processing is required');
+      Alert.alert(t('common.error'), t('auth.openConsentRequired', 'Open consent for data processing is required'));
       isValid = false;
     }
 
@@ -189,12 +203,28 @@ const SignupScreen = ({ navigation, onAuthStateChange }) => {
         lastName: formData.lastName.trim(),
         email: formData.email.trim(),
         phoneNumber: formData.phoneNumber.trim(),
+        identityNumber: formData.identityNumber.trim(),
         password: formData.password,
         consents: consents,
         permissions: permissionsGranted
       };
 
       const response = await AuthService.signup(signupData);
+      
+      // Dispatch login success action to Redux store and wait for completion
+      await dispatch(setLoginSuccess({
+        token: response.token,
+        user: {
+          id: response.userId,
+          email: response.username,
+          role: response.role,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phoneNumber,
+          identityNumber: formData.identityNumber
+        },
+        expiresIn: response.expiresIn
+      })).unwrap(); // unwrap to get the actual result or throw error
       
       Alert.alert(
         'Success', 
@@ -207,6 +237,7 @@ const SignupScreen = ({ navigation, onAuthStateChange }) => {
               if (onAuthStateChange) {
                 onAuthStateChange(true);
               }
+              // Navigate to main app - Redux will handle the authentication state
             }
           }
         ]
@@ -280,12 +311,12 @@ const SignupScreen = ({ navigation, onAuthStateChange }) => {
             {/* Form */}
             <View style={styles.form}>
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>First Name *</Text>
+                <Text style={styles.label}>{t('auth.firstName')} *</Text>
                 <TextInput
                   style={[styles.input, fieldErrors.firstName && styles.inputError]}
                   value={formData.firstName}
                   onChangeText={(value) => handleInputChange('firstName', value)}
-                  placeholder="Enter first name"
+                  placeholder={t('auth.firstName')}
                   placeholderTextColor="#999"
                 />
                 {fieldErrors.firstName && (
@@ -294,12 +325,12 @@ const SignupScreen = ({ navigation, onAuthStateChange }) => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Last Name *</Text>
+                <Text style={styles.label}>{t('auth.lastName')} *</Text>
                 <TextInput
                   style={[styles.input, fieldErrors.lastName && styles.inputError]}
                   value={formData.lastName}
                   onChangeText={(value) => handleInputChange('lastName', value)}
-                  placeholder="Enter last name"
+                  placeholder={t('auth.lastName')}
                   placeholderTextColor="#999"
                 />
                 {fieldErrors.lastName && (
@@ -308,16 +339,15 @@ const SignupScreen = ({ navigation, onAuthStateChange }) => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Email *</Text>
+                <Text style={styles.label}>{t('auth.email')} *</Text>
                 <TextInput
                   style={[styles.input, fieldErrors.email && styles.inputError]}
                   value={formData.email}
                   onChangeText={(value) => handleInputChange('email', value)}
-                  placeholder="Enter email address"
+                  placeholder={t('auth.email')}
                   placeholderTextColor="#999"
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  autoCorrect={false}
                 />
                 {fieldErrors.email && (
                   <Text style={styles.errorText}>{fieldErrors.email}</Text>
@@ -325,12 +355,12 @@ const SignupScreen = ({ navigation, onAuthStateChange }) => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Phone Number</Text>
+                <Text style={styles.label}>{t('auth.phone')}</Text>
                 <TextInput
                   style={[styles.input, fieldErrors.phoneNumber && styles.inputError]}
                   value={formData.phoneNumber}
                   onChangeText={(value) => handleInputChange('phoneNumber', value)}
-                  placeholder="Enter phone number"
+                  placeholder={t('auth.phone')}
                   placeholderTextColor="#999"
                   keyboardType="phone-pad"
                 />
@@ -340,12 +370,27 @@ const SignupScreen = ({ navigation, onAuthStateChange }) => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Password *</Text>
+                <Text style={styles.label}>{t('auth.identityNumber')} *</Text>
+                <TextInput
+                  style={[styles.input, fieldErrors.identityNumber && styles.inputError]}
+                  value={formData.identityNumber}
+                  onChangeText={(value) => handleInputChange('identityNumber', value)}
+                  placeholder={t('auth.identityNumberPlaceholder')}
+                  placeholderTextColor="#999"
+                  keyboardType="numeric"
+                />
+                {fieldErrors.identityNumber && (
+                  <Text style={styles.errorText}>{fieldErrors.identityNumber}</Text>
+                )}
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('auth.password')} *</Text>
                 <TextInput
                   style={[styles.input, fieldErrors.password && styles.inputError]}
                   value={formData.password}
                   onChangeText={(value) => handleInputChange('password', value)}
-                  placeholder="Enter password (min 6 characters)"
+                  placeholder={t('auth.password')}
                   placeholderTextColor="#999"
                   secureTextEntry
                 />
@@ -355,12 +400,12 @@ const SignupScreen = ({ navigation, onAuthStateChange }) => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Confirm Password *</Text>
+                <Text style={styles.label}>{t('auth.confirmPassword')} *</Text>
                 <TextInput
                   style={[styles.input, fieldErrors.confirmPassword && styles.inputError]}
                   value={formData.confirmPassword}
                   onChangeText={(value) => handleInputChange('confirmPassword', value)}
-                  placeholder="Confirm password"
+                  placeholder={t('auth.confirmPassword')}
                   placeholderTextColor="#999"
                   secureTextEntry
                 />

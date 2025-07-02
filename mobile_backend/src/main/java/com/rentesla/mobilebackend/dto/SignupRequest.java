@@ -23,6 +23,11 @@ public class SignupRequest {
     @Size(max = 20)
     private String phoneNumber;
     
+    // Identity number (TC Kimlik No for Turkish citizens, etc.)
+    @NotBlank(message = "Identity number is required")
+    @Size(min = 10, max = 20, message = "Identity number must be between 10 and 20 characters")
+    private String identityNumber;
+    
     @NotBlank(message = "Password is required")
     @Size(min = 6, max = 100, message = "Password must be between 6 and 100 characters")
     private String password;
@@ -37,11 +42,12 @@ public class SignupRequest {
     public SignupRequest() {}
     
     public SignupRequest(String firstName, String lastName, String email, String phoneNumber, 
-                        String password, Map<String, Boolean> consents, Map<String, Boolean> permissions) {
+                        String identityNumber, String password, Map<String, Boolean> consents, Map<String, Boolean> permissions) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.email = email;
         this.phoneNumber = phoneNumber;
+        this.identityNumber = identityNumber;
         this.password = password;
         this.consents = consents;
         this.permissions = permissions;
@@ -78,6 +84,14 @@ public class SignupRequest {
     
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
+    }
+    
+    public String getIdentityNumber() {
+        return identityNumber;
+    }
+    
+    public void setIdentityNumber(String identityNumber) {
+        this.identityNumber = identityNumber;
     }
     
     public String getPassword() {

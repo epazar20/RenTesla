@@ -6,20 +6,38 @@ React Native Expo ile geliştirilmiş Tesla araç kiralama sistemi mobile uygula
 
 - **Modern UI/UX**: Tesla'nın tasarım diline uygun modern arayüz
 - **Real-time Data**: Spring Boot backend ile gerçek zamanlı veri entegrasyonu
+- **JWT Authentication**: Otomatik token yönetimi ve güvenli oturum kontrolü
+- **Redux State Management**: Merkezi state yönetimi ve otomatik logout
+- **Auto-Logout Protection**: Token süresi dolduğunda otomatik yönlendirme
 - **Vehicle Management**: Araç arama, filtreleme ve detay görüntüleme
-- **Interactive Maps**: Araç konumlarını haritada görüntüleme
+- **Interactive Maps**: Araç konumlarını haritada görüntüleme (WebView tabanlı)
 - **User Profile**: Kullanıcı profili ve ayarlar yönetimi
 - **Cross-platform**: iOS ve Android desteği
 
 ## 🛠 Teknoloji Stack
 
 - **Framework**: React Native + Expo SDK 53
+- **State Management**: Redux Toolkit + AsyncStorage
+- **Authentication**: JWT token with auto-refresh
 - **Navigation**: React Navigation 7
-- **HTTP Client**: Axios
+- **HTTP Client**: Axios with interceptors
+- **Maps**: Google Maps via WebView
 - **UI Components**: React Native + Expo Vector Icons
-- **Maps**: React Native Maps (gelecekte)
-- **State Management**: React Hooks
 - **Platform**: iOS, Android, Web
+
+## 🔐 JWT Token Management
+
+### Otomatik Token Yönetimi
+- **AsyncStorage**: Token'lar güvenli şekilde saklanır
+- **Redux Store**: Merkezi authentication state yönetimi
+- **Axios Interceptors**: Her API isteğine otomatik token ekleme
+- **Auto-Logout**: Token süresi dolduğunda otomatik logout ve redirect
+
+### Güvenlik Özellikleri
+- Token validation her uygulama başlatışında
+- 401/403 hatalarında otomatik logout
+- Navigation stack reset ile güvenli yönlendirme
+- Error handling ve user feedback
 
 ## 📋 Gereksinimler
 
@@ -36,21 +54,34 @@ git clone <repository-url>
 cd mobile_frontend
 ```
 
-### 2. Bağımlılıkları Yükleyin
+### 2. Environment Değişkenlerini Ayarlayın
+```bash
+cp .env.example .env
+```
+
+`.env` dosyasını düzenleyin:
+```env
+# Google Maps API Key (REQUIRED)
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
+
+# API Configuration
+EXPO_PUBLIC_API_BASE_URL_DEVELOPMENT=http://your_local_ip:8080/api/mobile
+EXPO_PUBLIC_API_BASE_URL_PRODUCTION=https://your-production-api.com/api/mobile
+
+# Demo Admin Credentials (Remove in production!)
+EXPO_PUBLIC_DEMO_ADMIN_USERNAME=admin
+EXPO_PUBLIC_DEMO_ADMIN_PASSWORD=admin123
+```
+
+### 3. Bağımlılıkları Yükleyin
 ```bash
 npm install
 ```
 
-### 3. Backend API'yi Ayarlayın
-`src/constants/api.js` dosyasında backend URL'ini güncelleyin:
-```javascript
-export const API_CONFIG = {
-  BASE_URL: 'http://localhost:8080/api/mobile', // Backend URL'inizi buraya yazın
-  // ...
-};
-```
+### 4. Backend API'yi Başlatın
+Backend uygulamasının çalıştığından emin olun (`http://localhost:8080/api/mobile`)
 
-### 4. Uygulamayı Çalıştırın
+### 5. Uygulamayı Çalıştırın
 ```bash
 # Development server başlat
 npm start
@@ -71,14 +102,45 @@ npm run web
 src/
 ├── components/          # Yeniden kullanılabilir bileşenler
 ├── constants/          # API ve uygulama sabitleri
-├── navigation/         # Navigation yapısı
+├── navigation/         # Navigation yapısı (Redux entegreli)
 ├── screens/           # Uygulama ekranları
-├── services/          # API servisleri
-├── types/             # TypeScript tip tanımları (gelecekte)
+├── services/          # API servisleri ve interceptors
+├── store/             # Redux store ve slices
+│   ├── store.js       # Redux store konfigürasyonu
+│   └── slices/        # Redux slice'lar
+│       └── authSlice.js  # Authentication state management
 └── utils/             # Yardımcı fonksiyonlar
 ```
 
+## 🔑 Authentication Flow
+
+### Login Süreci
+1. Kullanıcı credentials girer
+2. Redux `loginUser` action dispatch edilir
+3. API'ye login request gönderilir
+4. Token alınırsa AsyncStorage'a kaydedilir
+5. Redux state güncellenir
+6. Navigation otomatik olarak main app'e yönlendirir
+
+### Auto-Logout Süreci
+1. API request 401/403 hatası döner
+2. Axios interceptor hatayı yakalar
+3. `logoutUser` action dispatch edilir
+4. AsyncStorage temizlenir
+5. Redux state sıfırlanır
+6. Navigation login screen'e reset edilir
+
+### Token Validation
+- Uygulama açılışında stored token validate edilir
+- Geçersiz token'lar otomatik temizlenir
+- Loading states ile smooth UX
+
 ## 🎯 Ana Ekranlar
+
+### 🔐 Authentication Screens
+- **LoginScreen**: Redux entegreli giriş ekranı
+- **SignupScreen**: Kayıt olma ekranı
+- Auto-navigation between auth and main app
 
 ### 🏠 Home Screen
 - Fleet özet istatistikleri
@@ -89,30 +151,65 @@ src/
 - Müsait araçların listesi
 - Arama ve filtreleme
 - Araç detay görüntüleme
+- JWT korumalı API calls
 
 ### 🗺 Map Screen
+- Google Maps WebView entegrasyonu
 - Araçların harita üzerinde konumları
-- Gerçek zamanlı konum güncellemeleri
+- JWT authentication ile veri yükleme
+- Real-time location tracking
 
 ### 👤 Profile Screen
-- Kullanıcı profili
-- Uygulama ayarları
-- Destek seçenekleri
+- Redux tabanlı user state
+- Secure logout functionality
+- Kullanıcı ayarları
 
 ## 🔌 API Entegrasyonu
 
-Uygulama Spring Boot backend ile RESTful API üzerinden iletişim kurar:
+### Otomatik Token Management
+```javascript
+// Axios interceptor otomatik token ekler
+axios.interceptors.request.use((config) => {
+  const token = store.getState().auth.token;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+```
 
-### Vehicle Endpoints
-- `GET /vehicles` - Müsait araçları listele
-- `GET /vehicles/{id}` - Araç detaylarını getir
-- `GET /vehicles/search` - Araç ara
-- `GET /vehicles/with-location` - Konumlu araçları getir
+### Error Handling
+```javascript
+// 401/403 hatalarında otomatik logout
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      store.dispatch(logoutUser());
+      navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+    return Promise.reject(error);
+  }
+);
+```
 
-### User Endpoints
-- `GET /users` - Kullanıcıları listele
-- `POST /users` - Yeni kullanıcı oluştur
-- `GET /users/stats` - Kullanıcı istatistikleri
+## 🗃 State Management
+
+### Redux Store
+```javascript
+// Store configuration
+const store = configureStore({
+  reducer: {
+    auth: authReducer,
+  },
+});
+```
+
+### Auth Slice
+- `loginUser`: Async login action
+- `logoutUser`: Async logout action
+- `loadStoredAuth`: Uygulama açılışında token yükleme
+- `setAuthError`: Error state management
 
 ## 🎨 Design System
 
@@ -123,32 +220,24 @@ Uygulama Spring Boot backend ile RESTful API üzerinden iletişim kurar:
 - **Warning**: #FF9800
 - **Error**: #F44336
 
-### Typography
-- **Headers**: Bold, Tesla Sans benzeri
-- **Body**: Regular, okunabilir fontlar
-- **Captions**: Light, bilgi metinleri
-
 ## 📦 Kullanılan Paketler
 
-### Core
-- `expo` - Expo SDK
-- `react-native` - React Native framework
+### Redux & State Management
+- `@reduxjs/toolkit` - Modern Redux
+- `react-redux` - React Redux bindings
+- `@react-native-async-storage/async-storage` - Persistent storage
 
 ### Navigation
 - `@react-navigation/native` - Navigation core
 - `@react-navigation/stack` - Stack navigator
 - `@react-navigation/bottom-tabs` - Tab navigator
 
-### UI & Icons
-- `@expo/vector-icons` - Icon seti
-- `react-native-safe-area-context` - Safe area management
+### HTTP & API
+- `axios` - HTTP client with interceptors
 
-### Networking
-- `axios` - HTTP client
-
-### Location & Maps
+### Maps & Location
 - `expo-location` - Konum servisleri
-- `react-native-maps` - Harita bileşeni
+- `react-native-webview` - Google Maps WebView
 
 ## 🔧 Development
 
@@ -157,26 +246,45 @@ Uygulama Spring Boot backend ile RESTful API üzerinden iletişim kurar:
 # Metro bundler loglarını görüntüle
 npm start
 
-# React Native debugger kullan
+# Redux DevTools ile state monitoring
 # Chrome DevTools ile debug
 ```
 
 ### Environment Variables
-Geliştirme ve prodüksiyon için farklı API URL'leri:
 ```javascript
-const API_CONFIG = {
-  BASE_URL: __DEV__ 
-    ? 'http://localhost:8080/api/mobile'  // Development
-    : 'https://api.rentesla.com/mobile',  // Production
+// Platform-specific API URLs
+const getBaseUrl = () => {
+  if (__DEV__) {
+    if (Platform.OS === 'android') {
+      return process.env.EXPO_PUBLIC_API_BASE_URL_ANDROID_DEVICE;
+    } else if (Platform.OS === 'ios') {
+      return process.env.EXPO_PUBLIC_API_BASE_URL_IOS;
+    }
+  }
+  return process.env.EXPO_PUBLIC_API_BASE_URL_PRODUCTION;
 };
 ```
+
+## 🚨 Security Best Practices
+
+### JWT Token Security
+1. **AsyncStorage**: Token'lar encrypted storage'da saklanır
+2. **Auto-Expire**: Token validation ve otomatik cleanup
+3. **Interceptors**: Merkezi token management
+4. **No Hardcoding**: Tüm credentials environment variables'da
+
+### API Security
+1. **HTTPS**: Production'da HTTPS kullanımı
+2. **Token Validation**: Her request'te token geçerliliği kontrolü
+3. **Error Handling**: Güvenli error messages
+4. **CORS**: Proper CORS configuration
 
 ## 📱 Platform Özellikleri
 
 ### iOS
 - Native iOS design patterns
 - Safe area handling
-- iOS specific icons
+- iOS specific navigation
 
 ### Android
 - Material Design elements
@@ -188,8 +296,8 @@ const API_CONFIG = {
 ### Development Build
 ```bash
 # Expo development build
-expo build:android
-expo build:ios
+npx expo run:ios
+npx expo run:android
 ```
 
 ### Production Build
@@ -199,43 +307,29 @@ eas build --platform android
 eas build --platform ios
 ```
 
-## 🧪 Testing
+## 🧪 Testing Authentication
 
+### Login Test
 ```bash
-# Unit testler (gelecekte)
-npm test
-
-# E2E testler (gelecekte)
-npm run test:e2e
+# Demo credentials
+Username: admin
+Password: admin123
 ```
 
-## 📊 Performance
-
-- **Lazy Loading**: Ekranlar ihtiyaç halinde yüklenir
-- **Image Optimization**: Görseller optimize edilir
-- **API Caching**: Network istekleri cache'lenir
-- **Bundle Size**: Minimum paket boyutu
-
-## 🔐 Security
-
-- **API Security**: JWT token tabanlı authentication
-- **Data Validation**: Giriş verisi doğrulama
-- **Secure Storage**: Hassas verilerin güvenli saklanması
-
-## 🌍 Internationalization
-
-Gelecekte çoklu dil desteği eklenecek:
-- Türkçe (varsayılan)
-- English
-- Deutsch
+### Token Expiration Test
+1. Login yapın
+2. Backend'de token expiration'ı kısaltın
+3. Herhangi bir protected endpoint'e istek atın
+4. Otomatik logout'u gözlemleyin
 
 ## 🤝 Katkıda Bulunma
 
 1. Fork the repository
 2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+3. **Create your own `.env` file** (don't commit it!)
+4. Make your changes
+5. Test authentication flow
+6. Submit a pull request
 
 ## 📝 License
 
@@ -251,176 +345,22 @@ Bu proje MIT lisansı altında lisanslanmıştır.
 ## 🔄 Güncellemeler
 
 ### v1.0.0
-- ✅ Temel navigation yapısı
-- ✅ Vehicle listing ve detayları
-- ✅ API entegrasyonu
-- ✅ Modern UI/UX tasarımı
+- ✅ Redux Toolkit entegrasyonu
+- ✅ JWT token management sistemi
+- ✅ Otomatik logout ve redirect
+- ✅ Axios interceptors
+- ✅ AsyncStorage token persistence
+- ✅ Modern navigation yapısı
+- ✅ WebView tabanlı Google Maps
 - ✅ Cross-platform destek
 
 ### Gelecek Özellikler
-- 🔄 Gerçek harita entegrasyonu
+- 🔄 Token refresh mechanism
+- 🔄 Biometric authentication
 - 🔄 Push notifications
 - 🔄 Offline support
-- 🔄 Biometric authentication
-- 🔄 Payment integration
-
-## 🔐 Environment Setup
-
-Before running the application, you need to set up environment variables:
-
-### 1. Create Environment File
-```bash
-cp .env.example .env
-```
-
-### 2. Configure Environment Variables
-
-Edit the `.env` file with your actual values:
-
-```env
-# Google Maps API Key (Required)
-EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_actual_google_maps_api_key
-
-# API Configuration
-EXPO_PUBLIC_API_BASE_URL_DEVELOPMENT=http://your_local_ip:8080/api/mobile
-EXPO_PUBLIC_API_BASE_URL_PRODUCTION=https://your-production-api.com/api/mobile
-
-# iOS Development URL
-EXPO_PUBLIC_API_BASE_URL_IOS=http://localhost:8080/api/mobile
-
-# Android Development URLs
-EXPO_PUBLIC_API_BASE_URL_ANDROID_EMULATOR=http://10.0.2.2:8080/api/mobile
-EXPO_PUBLIC_API_BASE_URL_ANDROID_DEVICE=http://your_local_ip:8080/api/mobile
-
-# Demo Admin Credentials (Remove in production!)
-EXPO_PUBLIC_DEMO_ADMIN_USERNAME=admin
-EXPO_PUBLIC_DEMO_ADMIN_PASSWORD=admin123
-```
-
-### 3. Important Security Notes
-
-⚠️ **NEVER commit the `.env` file to version control!**
-
-- The `.env` file contains sensitive information like API keys
-- Only commit `.env.example` with placeholder values
-- Each developer should create their own `.env` file locally
-
-## 🚀 Installation & Setup
-
-### Prerequisites
-- Node.js (v16 or higher)
-- npm or yarn
-- Expo CLI
-- iOS Simulator (for iOS development)
-- Android Studio/Emulator (for Android development)
-
-### Install Dependencies
-```bash
-npm install
-```
-
-### Start Development Server
-```bash
-npx expo start
-```
-
-## 🗺️ Google Maps Setup
-
-1. Get a Google Maps API Key from [Google Cloud Console](https://console.cloud.google.com/)
-2. Enable the following APIs:
-   - Maps JavaScript API
-   - Places API (if needed)
-   - Geocoding API (if needed)
-3. Add your API key to the `.env` file
-4. Rebuild the app:
-   ```bash
-   npx expo run:ios    # for iOS
-   npx expo run:android # for Android
-   ```
-
-## 📱 Running the App
-
-### iOS Simulator
-```bash
-npx expo run:ios
-```
-
-### Android Emulator
-```bash
-npx expo run:android
-```
-
-### Physical Device
-Use Expo Go app and scan the QR code from `npx expo start`
-
-## 🔧 Configuration
-
-### API URLs
-- **Development**: Uses local IP address for device testing
-- **iOS Simulator**: Uses localhost
-- **Android Emulator**: Uses 10.0.2.2 (emulator localhost)
-- **Production**: Uses production API URL
-
-### Authentication
-- Demo admin login is available for testing
-- Real authentication should be implemented for production
-
-## 🎯 Features
-
-- **Vehicle Map**: Interactive map showing all available vehicles
-- **Authentication**: JWT-based authentication system  
-- **Vehicle Management**: Browse, search, and view vehicle details
-- **User Management**: User registration and profile management
-- **Document Upload**: KYC document verification system
-
-## 🛠️ Development
-
-### Project Structure
-```
-src/
-├── components/     # Reusable UI components
-├── screens/       # Screen components
-├── navigation/    # Navigation configuration
-├── services/      # API service layer
-├── constants/     # App constants and configuration
-└── utils/         # Utility functions
-```
-
-### Environment Variables
-All sensitive data is managed through environment variables:
-- API keys
-- API endpoints
-- Authentication credentials (demo only)
-
-## 🚨 Security Best Practices
-
-1. **Environment Variables**: All secrets are in `.env` file
-2. **API Keys**: Never hardcode API keys in source code
-3. **Authentication**: Use secure JWT tokens
-4. **Network**: Use HTTPS in production
-5. **Data Validation**: Validate all user inputs
-
-## 📖 API Documentation
-
-The backend API provides comprehensive endpoints for:
-- Vehicle management
-- User authentication
-- Document verification
-- Location services
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. **Create your own `.env` file** (don't commit it!)
-4. Make your changes
-5. Test thoroughly
-6. Submit a pull request
-
-## 📄 License
-
-This project is proprietary software for RenTesla.
+- 🔄 Advanced error recovery
 
 ---
 
-**⚠️ Remember: Never commit sensitive information like API keys or passwords to version control!** 
+**⚠️ Security Reminder: Never commit sensitive information like API keys, passwords, or JWT secrets to version control!** 

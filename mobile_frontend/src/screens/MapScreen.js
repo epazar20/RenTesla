@@ -8,54 +8,56 @@ import {
   ActivityIndicator,
   Dimensions,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { WebView } from 'react-native-webview';
-import { vehicleService } from '../services';
-import AuthService from '../services/authService';
+import { useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
+import { apiService } from '../services/apiService';
+import { selectIsAuthenticated, selectUser } from '../store/slices/authSlice';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
 // Environment variables with fallback values
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyC7QWTyi-H4F770oFNIMiD5FG5V2529XIU';
-const DEMO_ADMIN_USERNAME = process.env.EXPO_PUBLIC_DEMO_ADMIN_USERNAME || 'admin';
-const DEMO_ADMIN_PASSWORD = process.env.EXPO_PUBLIC_DEMO_ADMIN_PASSWORD || 'admin123';
 
 const MapScreen = ({ navigation }) => {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState(null);
-  const [authLoading, setAuthLoading] = useState(false);
   const [webViewKey, setWebViewKey] = useState(0);
+
+  // Redux selectors
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const user = useSelector(selectUser);
+  const { t } = useTranslation();
+
+  let insets;
+  try {
+    insets = useSafeAreaInsets();
+  } catch (error) {
+    console.warn('SafeAreaInsets not available, using default values:', error);
+    insets = { top: 0, bottom: 0, left: 0, right: 0 };
+  }
 
   useEffect(() => {
     initializeMap();
-  }, []);
+  }, [isAuthenticated]);
 
   const initializeMap = async () => {
     try {
-      // Check if user is authenticated
-      const isAuthenticated = await AuthService.isAuthenticated();
-      
+      // Check if user is authenticated (Redux handles this now)
       if (!isAuthenticated) {
-        console.log('🔐 User not authenticated, logging in as admin for map demo...');
-        setAuthLoading(true);
-        
-        try {
-          // Auto-login as admin for demo/testing (use environment variables)
-          await AuthService.login(DEMO_ADMIN_USERNAME, DEMO_ADMIN_PASSWORD);
-          console.log('✅ Admin login successful for map demo');
-        } catch (error) {
-          console.error('❌ Admin login failed:', error);
-          Alert.alert('Authentication Error', 'Failed to authenticate for map access. Please login first.');
-          setLoading(false);
-          setAuthLoading(false);
-          return;
-        }
-        setAuthLoading(false);
+        console.log('🔐 User not authenticated, redirecting to login...');
+        // Navigation will be handled automatically by MainNavigator
+        return;
       }
 
+      console.log(`✅ User authenticated: ${user?.username || 'Unknown'}`);
+      
       // Proceed with map initialization
       await Promise.all([
         loadVehiclesWithLocation(),
@@ -64,7 +66,6 @@ const MapScreen = ({ navigation }) => {
     } catch (error) {
       console.error('❌ Map initialization error:', error);
       setLoading(false);
-      setAuthLoading(false);
     }
   };
 
@@ -72,7 +73,7 @@ const MapScreen = ({ navigation }) => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Konum İzni', 'Harita özelliklerini kullanmak için konum izni gereklidir.');
+        Alert.alert(t('map.title'), t('map.locationPermission'));
         return;
       }
 
@@ -93,7 +94,7 @@ const MapScreen = ({ navigation }) => {
       setLoading(true);
       console.log('🚗 Loading vehicles with location...');
       
-      const data = await vehicleService.getAllVehicles();
+      const data = await apiService.getAllVehicles();
       console.log(`📍 Received ${data.length} vehicles from API`);
       
       // Filter vehicles that have location data
@@ -110,14 +111,15 @@ const MapScreen = ({ navigation }) => {
       console.error('Error loading vehicles with location:', error);
       
       // Show specific error message
-      let errorMessage = 'Araç konumları yüklenirken hata oluştu';
+      let errorMessage = t('errors.serverError');
       if (error.response?.status === 401 || error.response?.status === 403) {
-        errorMessage = 'Yetkilendirme hatası. Lütfen tekrar giriş yapın.';
+        errorMessage = t('errors.tokenExpired');
+        // Auto-logout will be handled by axios interceptor
       } else if (error.response?.status === 500) {
-        errorMessage = 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.';
+        errorMessage = t('errors.serverError');
       }
       
-      Alert.alert('Hata', errorMessage);
+      Alert.alert(t('common.error'), errorMessage);
     } finally {
       setLoading(false);
     }
@@ -255,31 +257,25 @@ const MapScreen = ({ navigation }) => {
 </html>`;
   };
 
-  if (authLoading) {
+  // Show loading if not authenticated or loading
+  if (!isAuthenticated || loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3498DB" />
-        <Text style={styles.loadingText}>Kimlik doğrulanıyor...</Text>
-      </View>
-    );
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498DB" />
-        <Text style={styles.loadingText}>Harita yükleniyor...</Text>
+        <Text style={styles.loadingText}>
+          {!isAuthenticated ? t('map.authenticating') : t('map.loadingMap')}
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Platform.OS === 'android' ? (insets.bottom || 0) + 70 : (insets.bottom || 0) + 60 }]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerInfo}>
           <Ionicons name="map-outline" size={24} color="#3498DB" />
-          <Text style={styles.headerTitle}>Araç Konumları</Text>
+          <Text style={styles.headerTitle}>{t('map.title')}</Text>
         </View>
         <View style={styles.headerButtons}>
           <TouchableOpacity
@@ -306,7 +302,7 @@ const MapScreen = ({ navigation }) => {
           renderLoading={() => (
             <View style={styles.webviewLoading}>
               <ActivityIndicator size="large" color="#3498DB" />
-              <Text style={styles.loadingText}>Google Maps yükleniyor...</Text>
+              <Text style={styles.loadingText}>{t('map.loadingMap')}</Text>
             </View>
           )}
           onError={(error) => {
@@ -322,19 +318,19 @@ const MapScreen = ({ navigation }) => {
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>{vehicles.length}</Text>
-          <Text style={styles.statLabel}>Toplam Araç</Text>
+          <Text style={styles.statLabel}>{t('home.totalVehicles')}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>
             {vehicles.filter(v => v.status === 'AVAILABLE').length}
           </Text>
-          <Text style={styles.statLabel}>Müsait</Text>
+          <Text style={styles.statLabel}>{t('map.available')}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>
             {vehicles.filter(v => v.status === 'RENTED').length}
           </Text>
-          <Text style={styles.statLabel}>Kiralandı</Text>
+          <Text style={styles.statLabel}>{t('map.rented')}</Text>
         </View>
       </View>
 
@@ -342,15 +338,15 @@ const MapScreen = ({ navigation }) => {
       <View style={styles.legendContainer}>
         <View style={styles.legendItem}>
           <View style={[styles.legendColor, { backgroundColor: '#2ECC71' }]} />
-          <Text style={styles.legendText}>Müsait</Text>
+          <Text style={styles.legendText}>{t('map.available')}</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendColor, { backgroundColor: '#E74C3C' }]} />
-          <Text style={styles.legendText}>Kiralandı</Text>
+          <Text style={styles.legendText}>{t('map.rented')}</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendColor, { backgroundColor: '#F39C12' }]} />
-          <Text style={styles.legendText}>Bakım</Text>
+          <Text style={styles.legendText}>{t('map.maintenance')}</Text>
         </View>
       </View>
     </View>

@@ -11,47 +11,90 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AuthService from '../services/authService';
+import { useDispatch, useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
+import { loginUser, selectAuthLoading, selectAuthError } from '../store/slices/authSlice';
+import notificationService from '../services/notificationService';
 
-const LoginScreen = ({ navigation, onAuthStateChange }) => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
-  const [loading, setLoading] = useState(false);
+// Language options for inline selector
+const languages = [
+  { code: 'tr', name: 'Türkçe', flag: '🇹🇷' },
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+  { code: 'ru', name: 'Русский', flag: '🇷🇺' }
+];
+
+const LoginScreen = ({ navigation }) => {
+  const [username, setUsername] = useState('test@rentesla.com');
+  const [password, setPassword] = useState('password123');
+  
+  const dispatch = useDispatch();
+  const isLoading = useSelector(selectAuthLoading);
+  const authError = useSelector(selectAuthError);
+  const { t, i18n } = useTranslation();
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter both username and password');
+      Alert.alert(t('common.error'), t('auth.enterCredentials'));
       return;
     }
 
-    setLoading(true);
     try {
-      const response = await AuthService.login(username.trim(), password);
+      const result = await dispatch(loginUser({ 
+        username: username.trim(), 
+        password 
+      })).unwrap();
       
-      Alert.alert(
-        'Success', 
-        `Welcome ${response.username}!`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Notify parent about auth state change
-              if (onAuthStateChange) {
-                onAuthStateChange(true);
-              }
-            }
-          }
-        ]
-      );
+      console.log(`✅ Login successful, welcome ${result.username}!`);
+      // Navigation will happen automatically via Redux state change
+      
+      // Initialize notifications after successful login
+        console.log('🔄 Initializing notifications after login...');
+        await notificationService.initialize();
+      console.log('✅ Local notifications initialized after login (Expo Go, no push)');
+      
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert(
-        'Login Failed', 
-        error.message || 'Please check your credentials and try again'
+        t('auth.loginFailed'), 
+        error || t('auth.checkCredentials')
       );
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const handleLanguageChange = async (languageCode) => {
+    try {
+      await i18n.changeLanguage(languageCode);
+    } catch (error) {
+      console.error('Language change error:', error);
+    }
+  };
+
+  const InlineLanguageSelector = () => {
+    return (
+      <View style={styles.languageSelectorContainer}>
+        <View style={styles.languageOptions}>
+          {languages.map((language) => (
+            <TouchableOpacity
+              key={language.code}
+              style={[
+                styles.languageOption,
+                i18n.language === language.code && styles.activeLanguageOption
+              ]}
+              onPress={() => handleLanguageChange(language.code)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.languageFlag,
+                i18n.language === language.code && styles.activeLanguageFlag
+              ]}>
+                {language.flag}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -63,62 +106,77 @@ const LoginScreen = ({ navigation, onAuthStateChange }) => {
         <View style={styles.content}>
           {/* Logo/Title */}
           <View style={styles.header}>
-            <Text style={styles.title}>RenTesla</Text>
-            <Text style={styles.subtitle}>Tesla Rental Platform</Text>
+            {/* Inline Language Selector - Moved to center */}
+            <InlineLanguageSelector />
+            
+            <Text style={styles.title}>{t('auth.loginTitle')}</Text>
+            <Text style={styles.subtitle}>{t('auth.loginSubtitle')}</Text>
           </View>
 
           {/* Login Form */}
           <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Username</Text>
+              <Text style={styles.label}>{t('auth.username')}</Text>
               <TextInput
                 style={styles.input}
                 value={username}
                 onChangeText={setUsername}
-                placeholder="Enter username"
+                placeholder={t('auth.username')}
                 placeholderTextColor="#999"
                 autoCapitalize="none"
                 autoCorrect={false}
+                editable={!isLoading}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={styles.label}>{t('auth.password')}</Text>
               <TextInput
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Enter password"
+                placeholder={t('auth.password')}
                 placeholderTextColor="#999"
                 secureTextEntry
+                editable={!isLoading}
               />
             </View>
 
             <TouchableOpacity 
-              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
               onPress={handleLogin}
-              disabled={loading}
+              disabled={isLoading}
             >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
+              {isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text style={styles.loadingText}>{t('auth.loggingIn')}</Text>
+                </View>
               ) : (
-                <Text style={styles.loginButtonText}>Login</Text>
+                <Text style={styles.loginButtonText}>{t('auth.loginButton')}</Text>
               )}
             </TouchableOpacity>
+
+            {/* Show auth error if present */}
+            {authError && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{authError}</Text>
+              </View>
+            )}
           </View>
 
           {/* Demo Credentials */}
           <View style={styles.demoInfo}>
-            <Text style={styles.demoTitle}>Demo Credentials:</Text>
-            <Text style={styles.demoText}>Username: admin</Text>
-            <Text style={styles.demoText}>Password: admin123</Text>
+            <Text style={styles.demoTitle}>{t('auth.demoCredentials')}</Text>
+            <Text style={styles.demoText}>{t('auth.demoUsername')}</Text>
+            <Text style={styles.demoText}>{t('auth.demoPassword')}</Text>
           </View>
 
           {/* Signup Link */}
           <View style={styles.signupContainer}>
-            <Text style={styles.signupText}>Don't have an account? </Text>
+            <Text style={styles.signupText}>{t('auth.noAccount')} </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-              <Text style={styles.signupLink}>Sign Up</Text>
+              <Text style={styles.signupLink}>{t('auth.signup')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -134,6 +192,49 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     flex: 1,
+  },
+  languageSelectorContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  languageOptions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 25,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  languageOption: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 2,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  activeLanguageOption: {
+    backgroundColor: '#E31E2E',
+    borderColor: '#B71C1C',
+    shadowColor: '#E31E2E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  languageFlag: {
+    fontSize: 22,
+  },
+  activeLanguageFlag: {
+    fontSize: 22,
+    // Keep the emoji color natural, don't override it
   },
   content: {
     flex: 1,
@@ -191,36 +292,57 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    marginLeft: 10,
+  },
+  errorContainer: {
+    backgroundColor: '#FFE6E6',
+    borderWidth: 1,
+    borderColor: '#FFB3B3',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 15,
+  },
+  errorText: {
+    color: '#CC0000',
+    fontSize: 14,
+    textAlign: 'center',
+  },
   demoInfo: {
     backgroundColor: '#E8F4F8',
     padding: 15,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#B3D9E8',
+    marginBottom: 20,
   },
   demoTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2C5282',
-    marginBottom: 8,
+    color: '#2C5AA0',
+    marginBottom: 5,
   },
   demoText: {
-    fontSize: 14,
-    color: '#2C5282',
-    fontFamily: 'Courier New',
+    fontSize: 12,
+    color: '#2C5AA0',
   },
   signupContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
+    alignItems: 'center',
   },
   signupText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#666',
   },
   signupLink: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#E31E2E',
     fontWeight: '600',
   },

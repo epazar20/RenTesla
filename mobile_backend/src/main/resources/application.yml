@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8090
   servlet:
     context-path: /api/mobile
 
@@ -35,7 +35,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: false
+    show-sql: true
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -133,3 +133,37 @@ app:
   frontend:
     url: ${FRONTEND_URL:http://localhost:3000}
 
+  # OCR Configuration
+  ocr:
+    # Processing timeout in seconds (default: 30 seconds)
+    timeout:
+      seconds: ${OCR_TIMEOUT_SECONDS:30}
+    
+    # OCR confidence thresholds
+    confidence:
+      threshold: ${OCR_CONFIDENCE_THRESHOLD:0.8}      # Minimum confidence for auto-approval
+    auto-approve:
+      threshold: ${OCR_AUTO_APPROVE_THRESHOLD:0.95}   # High confidence for instant approval
+    
+    # Mock OCR for testing (when Google Cloud Vision is not available)
+    mock:
+      enabled: ${OCR_MOCK_ENABLED:false}              # Real OCR enabled - set to true for testing
+
+# Google Cloud Configuration
+google:
+  cloud:
+    # Project ID for Google Cloud Vision API - Updated to match Firebase project
+    project-id: ${GOOGLE_CLOUD_PROJECT_ID:rentesla-mobile-app-87e52}
+    
+    # Vision API Configuration
+    vision:
+      enabled: ${GOOGLE_CLOUD_VISION_ENABLED:true}  # Enable real OCR
+      timeout: 30
+      
+    # Authentication (use one of these methods)
+    # Option 1: Service Account Key File
+    credentials:
+      location: ${GOOGLE_APPLICATION_CREDENTIALS:classpath:vision/rentesla-464421-677259788a1d.json}
+    
+    # Option 2: Application Default Credentials (recommended for production)
+    # Set GOOGLE_APPLICATION_CREDENTIALS environment variable to point to service account key file

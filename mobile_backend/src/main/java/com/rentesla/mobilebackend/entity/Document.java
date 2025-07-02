@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "documents")
@@ -35,6 +36,7 @@ public class Document extends BaseEntity {
     private DocumentStatus status = DocumentStatus.PENDING;
 
     @Column(name = "image_base64", columnDefinition = "LONGTEXT")
+    @JsonIgnore
     private String imageBase64;
 
     @Size(max = 255)

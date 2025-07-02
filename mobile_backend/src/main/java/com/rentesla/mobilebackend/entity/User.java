@@ -21,7 +21,6 @@ public class User extends BaseEntity {
     @Column(name = "last_name")
     private String lastName;
 
-    @NotBlank
     @Email
     @Size(max = 255)
     @Column(name = "email", nullable = false, unique = true)
@@ -67,14 +66,49 @@ public class User extends BaseEntity {
     @Column(name = "fcm_token")
     private String fcmToken;
 
+    @Column(name = "fcm_token_updated_at")
+    private java.time.LocalDateTime fcmTokenUpdatedAt;
+
+    // Notification Settings
+    @Column(name = "notification_rental_updates", nullable = false)
+    private Boolean notificationRentalUpdates = true;
+
+    @Column(name = "notification_promotions", nullable = false)
+    private Boolean notificationPromotions = true;
+
+    @Column(name = "notification_system_updates", nullable = false)
+    private Boolean notificationSystemUpdates = true;
+
+    // Privacy Settings
+    @Column(name = "share_location", nullable = false)
+    private Boolean shareLocation = true;
+
+    @Column(name = "share_rental_history", nullable = false)
+    private Boolean shareRentalHistory = true;
+
+    @Column(name = "two_factor_auth_enabled", nullable = false)
+    private Boolean twoFactorAuthEnabled = false;
+
+    // Identity verification field (TC Kimlik No, etc.)
+    @NotBlank(message = "Identity number is required")
+    @Size(min = 10, max = 20, message = "Identity number must be between 10 and 20 characters")
+    @Column(name = "identity_number", nullable = false, unique = true)
+    private String identityNumber;
+
+    // Password field for authentication
+    @Size(max = 255)
+    @Column(name = "password")
+    private String password;
+
     // Constructors
     public User() {}
 
-    public User(String firstName, String lastName, String email, String phone) {
+    public User(String firstName, String lastName, String email, String phone, String identityNumber) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.email = email;
         this.phone = phone;
+        this.identityNumber = identityNumber;
     }
 
     // Getters and Setters
@@ -197,6 +231,31 @@ public class User extends BaseEntity {
 
     public void setFcmToken(String fcmToken) {
         this.fcmToken = fcmToken;
+        this.fcmTokenUpdatedAt = java.time.LocalDateTime.now();
+    }
+
+    public java.time.LocalDateTime getFcmTokenUpdatedAt() {
+        return fcmTokenUpdatedAt;
+    }
+
+    public void setFcmTokenUpdatedAt(java.time.LocalDateTime fcmTokenUpdatedAt) {
+        this.fcmTokenUpdatedAt = fcmTokenUpdatedAt;
+    }
+
+    public String getIdentityNumber() {
+        return identityNumber;
+    }
+
+    public void setIdentityNumber(String identityNumber) {
+        this.identityNumber = identityNumber;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
     }
 
     public String getFullName() {
@@ -211,9 +270,58 @@ public class User extends BaseEntity {
         }
     }
 
+    // Add getters and setters for new fields
+    public Boolean getNotificationRentalUpdates() {
+        return notificationRentalUpdates;
+    }
+
+    public void setNotificationRentalUpdates(Boolean notificationRentalUpdates) {
+        this.notificationRentalUpdates = notificationRentalUpdates;
+    }
+
+    public Boolean getNotificationPromotions() {
+        return notificationPromotions;
+    }
+
+    public void setNotificationPromotions(Boolean notificationPromotions) {
+        this.notificationPromotions = notificationPromotions;
+    }
+
+    public Boolean getNotificationSystemUpdates() {
+        return notificationSystemUpdates;
+    }
+
+    public void setNotificationSystemUpdates(Boolean notificationSystemUpdates) {
+        this.notificationSystemUpdates = notificationSystemUpdates;
+    }
+
+    public Boolean getShareLocation() {
+        return shareLocation;
+    }
+
+    public void setShareLocation(Boolean shareLocation) {
+        this.shareLocation = shareLocation;
+    }
+
+    public Boolean getShareRentalHistory() {
+        return shareRentalHistory;
+    }
+
+    public void setShareRentalHistory(Boolean shareRentalHistory) {
+        this.shareRentalHistory = shareRentalHistory;
+    }
+
+    public Boolean getTwoFactorAuthEnabled() {
+        return twoFactorAuthEnabled;
+    }
+
+    public void setTwoFactorAuthEnabled(Boolean twoFactorAuthEnabled) {
+        this.twoFactorAuthEnabled = twoFactorAuthEnabled;
+    }
+
     public enum UserRole {
         CUSTOMER,
         ADMIN,
         MANAGER
     }
-} 
+}

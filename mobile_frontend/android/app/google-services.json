@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1092957851755",
+    "project_id": "rentesla-mobile-app-87e52",
+    "storage_bucket": "rentesla-mobile-app-87e52.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1092957851755:android:25171dd9441d232664a12e",
+        "android_client_info": {
+          "package_name": "com.rentesla.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZb-lLO7bf5VzliPBFPXkZMB_EjH-cChM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+} 

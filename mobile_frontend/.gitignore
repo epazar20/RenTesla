@@ -3,44 +3,59 @@
 # dependencies
 node_modules/
 
-# Expo
+# Expo/React Native
 .expo/
+.expo-shared/
 dist/
 web-build/
-expo-env.d.ts
+.expoignore
 
-# Native
-.kotlin/
-*.orig.*
+# Build outputs
+build/
+android/app/build/
+android/build/
+android/.gradle/
+ios/build/
+ios/Pods/
+*.apk
+*.aab
+*.ipa
+
+# Native keys/certs
 *.jks
+*.keystore
 *.p8
 *.p12
 *.key
 *.mobileprovision
+*.orig.*
+
+# Firebase/Google config
+firebase-cloud-message/*.json
+firebase-cloud-message/*.plist
 
 # Metro
 .metro-health-check*
 
-# debug
+# Debug/logs
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
+logs/
 
 # macOS
 .DS_Store
 *.pem
 
 # local env files
-.env*.local
+.env*
+*.env*
 
 # typescript
 *.tsbuildinfo
 
-# OSX
-.DS_Store
-
 # Xcode
-build/
 *.pbxuser
 !default.pbxuser
 *.mode1v3
@@ -54,122 +69,35 @@ xcuserdata
 *.moved-aside
 DerivedData
 *.hmap
-*.ipa
 *.xcuserstate
 project.xcworkspace
 
-# Android
-*.apk
-*.ap_
-*.dex
-*.class
-bin/
-gen/
-out/
-build/
-.gradle/
-local.properties
+# Android Studio/IntelliJ
 *.iml
 .idea/
+.gradle/
 .classpath
 .project
 .settings/
 .metadata/
 
-# Node
-node_modules/
-npm-debug.log
-yarn-error.log
-
-# React Native
-.expo/
-.expo-shared/
-dist/
-web-build/
-
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
+# Coverage, cache, temp
 coverage/
-*.lcov
-
-# nyc test coverage
-.nyc_output
-
-# Dependency directories
-jspm_packages/
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# dotenv environment variables file
-.env.test
-
-# parcel-bundler cache (https://parceljs.org/)
-.cache
-.parcel-cache
-
-# next.js build output
-.next
-
-# nuxt.js build output
-.nuxt
-
-# vuepress build output
-.vuepress/dist
-
-# Serverless directories
-.serverless
-
-# FuseBox cache
-.fusebox/
-
-# DynamoDB Local files
-.dynamodb/
-
-# TernJS port file
+.nyc_output/
+.cache/
+.parcel-cache/
+tmp/
+.temp/
 .tern-port
 
-# Stores VSCode versions used for testing VSCode extensions
-.vscode-test
-
-# Temporary folders
-tmp/
-temp/
-
-# Editor directories and files
+# Editor/IDE
 .vscode/
-.idea/
 *.swp
 *.swo
+
+# Dokümantasyon (README.md hariç)
+docs/*
+!docs/README.md
+
+# Test dosyaları
+test/

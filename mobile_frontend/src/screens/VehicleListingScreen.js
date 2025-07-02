@@ -16,7 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
-import apiService from '../services/apiService';
+import { apiService } from '../services/apiService';
 
 const { width } = Dimensions.get('window');
 

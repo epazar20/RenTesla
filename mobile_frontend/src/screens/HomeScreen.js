@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   Alert,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import apiService from '../services/apiService';
-import authService from '../services/authService';
-import * as SecureStore from 'expo-secure-store';
+import { useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
+import { selectIsAuthenticated, selectUser } from '../store/slices/authSlice';
+import { apiService } from '../services/apiService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const HomeScreen = ({ navigation }) => {
   const [stats, setStats] = useState({
@@ -22,39 +25,46 @@ const HomeScreen = ({ navigation }) => {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [userId, setUserId] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isDocumentVerified, setIsDocumentVerified] = useState(false);
+
+  // Redux selectors
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const user = useSelector(selectUser);
+  const userId = user?.id || user?.userId;
+  
+  // Translation hook
+  const { t } = useTranslation();
+
+  let insets;
+  try {
+    insets = useSafeAreaInsets();
+  } catch (error) {
+    console.warn('SafeAreaInsets not available, using default values:', error);
+    insets = { top: 0, bottom: 0, left: 0, right: 0 };
+  }
 
   useEffect(() => {
     loadInitialData();
-  }, []);
+  }, [isAuthenticated]);
 
   const loadInitialData = async () => {
     try {
-      // Check authentication status first
-      const authStatus = await authService.isAuthenticated();
-      setIsAuthenticated(authStatus);
-      
-      if (!authStatus) {
-        console.log('⚠️ User not authenticated, skipping stats loading');
+      // Authentication is now handled by Redux and MainNavigator
+      // HomeScreen will only render if user is authenticated
+      if (!isAuthenticated) {
+        console.log('⚠️ User not authenticated, MainNavigator should handle this');
         setLoading(false);
         return;
       }
 
-      // Get user ID from secure storage
-      const userData = await SecureStore.getItemAsync('user_data');
-      if (userData) {
-        const user = JSON.parse(userData);
-        setUserId(user.userId || user.id);
-        
-        // Check document verification status
-        if (user.userId || user.id) {
-          await checkDocumentVerification(user.userId || user.id);
-        }
+      console.log(`👤 Loading data for user: ${user?.username} (ID: ${userId})`);
+      
+      // Check document verification status
+      if (userId) {
+        await checkDocumentVerification(userId);
       }
       
-      // Load stats only if authenticated
+      // Load stats
       await loadStats();
     } catch (error) {
       console.error('Error loading initial data:', error);
@@ -75,9 +85,7 @@ const HomeScreen = ({ navigation }) => {
 
   const loadStats = async () => {
     try {
-      // Double check authentication
-      const authStatus = await authService.isAuthenticated();
-      if (!authStatus) {
+      if (!isAuthenticated) {
         console.log('⚠️ User not authenticated, cannot load stats');
         return;
       }
@@ -112,7 +120,7 @@ const HomeScreen = ({ navigation }) => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadInitialData(); // Use loadInitialData to include auth check
+    loadInitialData();
   };
 
   const StatCard = ({ title, value, icon, color, onPress }) => (
@@ -152,7 +160,7 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.featureTitle}>{title}</Text>
             {isNew && (
               <View style={styles.newBadge}>
-                <Text style={styles.newBadgeText}>YENİ</Text>
+                <Text style={styles.newBadgeText}>{t('features.new')}</Text>
               </View>
             )}
           </View>
@@ -164,57 +172,26 @@ const HomeScreen = ({ navigation }) => {
   );
 
   const handleDocumentVerificationPress = () => {
-    if (isDocumentVerified) {
-      Alert.alert('✅ Belge Doğrulama', 'Belge doğrulama işlemi tamamlandı!');
-    } else {
-      Alert.alert(
-        '⚠️ Belge Doğrulama',
-        'Belge doğrulama işlemi henüz tamamlanmamış. Belgelerinizi yüklemek için devam edin.',
-        [
-          { text: 'İptal', style: 'cancel' },
-          { 
-            text: 'Belgelerimi Yükle', 
-            onPress: () => navigation.navigate('Profile', { 
-              screen: 'Documents',
-              params: { userId: userId }
-            })
-          }
-        ]
-      );
-    }
+    console.log('🏠 HomeScreen: Opening Document Upload Modal');
+    
+    // Open DocumentUploadModal as standalone modal
+    navigation.navigate('DocumentUploadModal', { 
+      screen: 'DocumentUploadMain',
+      params: { 
+        userId,
+        fromHome: true,
+        preventAutoReturn: true
+      } 
+    });
+    
+    console.log('✅ Document Upload Modal opened');
   };
 
-  // If not authenticated, show login prompt
-  if (!isAuthenticated && !loading) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.notAuthenticatedContainer}>
-          <Ionicons name="log-in-outline" size={80} color="#3498DB" />
-          <Text style={styles.notAuthenticatedTitle}>RenTesla'ya Hoşgeldiniz</Text>
-          <Text style={styles.notAuthenticatedSubtitle}>
-            Araç kiralama hizmetlerimizden yararlanmak için giriş yapın
-          </Text>
-          <TouchableOpacity 
-            style={styles.loginButton}
-            onPress={() => navigation.navigate('Auth', { screen: 'Login' })}
-          >
-            <Text style={styles.loginButtonText}>Giriş Yap</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.signupButton}
-            onPress={() => navigation.navigate('Auth', { screen: 'Signup' })}
-          >
-            <Text style={styles.signupButtonText}>Kayıt Ol</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
+  // Loading state
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Yükleniyor...</Text>
+        <Text style={styles.loadingText}>{t('common.loading')}</Text>
       </View>
     );
   }
@@ -222,21 +199,24 @@ const HomeScreen = ({ navigation }) => {
   return (
     <ScrollView
       style={styles.container}
+      contentContainerStyle={{ 
+        paddingBottom: Platform.OS === 'android' ? (insets.bottom || 0) + 90 : (insets.bottom || 0) + 80 
+      }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       {/* Welcome Section */}
       <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeTitle}>RenTesla'ya Hoşgeldiniz</Text>
-        <Text style={styles.welcomeSubtitle}>Elektrikli araç kiralama deneyiminiz burada başlıyor</Text>
+        <Text style={styles.welcomeTitle}>{t('home.welcome', { username: user?.username || 'User' })}</Text>
+        <Text style={styles.welcomeSubtitle}>{t('home.subtitle')}</Text>
       </View>
 
       {/* PRD Feature Cards */}
       <View style={styles.featuresSection}>
-        <Text style={styles.sectionTitle}>Ana Özellikler</Text>
+        <Text style={styles.sectionTitle}>{t('home.mainFeatures')}</Text>
         
         <FeatureCard
-          title="Araç Listesi & Arama"
-          description="Konum tabanlı arama ile size en yakın araçları keşfedin"
+          title={t('features.vehicleListTitle')}
+          description={t('features.vehicleListDesc')}
           icon="car-outline"
           color="#3498DB"
           isNew={true}
@@ -247,8 +227,8 @@ const HomeScreen = ({ navigation }) => {
         />
         
         <FeatureCard
-          title="QR Kod Tarama"
-          description="Araç üzerindeki QR kodu tarayarak hızlıca kiralayın"
+          title={t('features.qrScanTitle')}
+          description={t('features.qrScanDesc')}
           icon="qr-code-outline"
           color="#2ECC71"
           isNew={true}
@@ -259,8 +239,8 @@ const HomeScreen = ({ navigation }) => {
         />
         
         <FeatureCard
-          title="Belge Doğrulama"
-          description="OCR teknolojisi ile belgelerinizi güvenle yükleyin"
+          title={t('features.documentTitle')}
+          description={t('features.documentDesc')}
           icon="document-text-outline"
           color="#E74C3C"
           onPress={handleDocumentVerificationPress}
@@ -269,10 +249,10 @@ const HomeScreen = ({ navigation }) => {
 
       {/* Statistics Cards */}
       <View style={styles.statsSection}>
-        <Text style={styles.sectionTitle}>Filo Durumu</Text>
+        <Text style={styles.sectionTitle}>{t('home.fleetStatus')}</Text>
         
         <StatCard
-          title="Müsait Araçlar"
+          title={t('home.availableVehicles')}
           value={stats.availableVehicles}
           icon="car-outline"
           color="#2ECC71"
@@ -283,14 +263,14 @@ const HomeScreen = ({ navigation }) => {
         />
         
         <StatCard
-          title="Toplam Araç"
+          title={t('home.totalVehicles')}
           value={stats.totalVehicles}
           icon="car-sport-outline"
           color="#3498DB"
         />
         
         <StatCard
-          title="Ortalama Şarj"
+          title={t('home.averageCharge')}
           value={`${stats.averageBatteryLevel}%`}
           icon="battery-half-outline"
           color="#F39C12"
@@ -299,11 +279,11 @@ const HomeScreen = ({ navigation }) => {
 
       {/* Quick Actions */}
       <View style={styles.quickActionsSection}>
-        <Text style={styles.sectionTitle}>Hızlı Erişim</Text>
+        <Text style={styles.sectionTitle}>{t('home.quickAccess')}</Text>
         
         <View style={styles.quickActionsGrid}>
           <QuickAction
-            title="Araç Listesi"
+            title={t('quickActions.vehicleList')}
             icon="list"
             color="#3498DB"
             badge={stats.availableVehicles > 0 ? stats.availableVehicles : null}
@@ -314,7 +294,7 @@ const HomeScreen = ({ navigation }) => {
           />
           
           <QuickAction
-            title="QR Tarama"
+            title={t('quickActions.qrScan')}
             icon="qr-code"
             color="#2ECC71"
             onPress={() => navigation.navigate('Vehicles', { 
@@ -324,14 +304,14 @@ const HomeScreen = ({ navigation }) => {
           />
           
           <QuickAction
-            title="Yakın Araçlar"
+            title={t('quickActions.nearbyVehicles')}
             icon="location"
             color="#E74C3C"
             onPress={() => navigation.navigate('Map')}
           />
           
           <QuickAction
-            title="Profilim"
+            title={t('quickActions.profile')}
             icon="person"
             color="#9B59B6"
             onPress={() => navigation.navigate('Profile')}
@@ -341,47 +321,47 @@ const HomeScreen = ({ navigation }) => {
 
       {/* PRD Progress */}
       <View style={styles.progressSection}>
-        <Text style={styles.sectionTitle}>Geliştirme Durumu</Text>
+        <Text style={styles.sectionTitle}>{t('home.developmentStatus')}</Text>
         
         <View style={styles.progressCard}>
-          <Text style={styles.progressTitle}>PRD İlerleme Durumu</Text>
+          <Text style={styles.progressTitle}>{t('progress.title')}</Text>
           
           <View style={styles.progressItem}>
             <Ionicons name="checkmark-circle" size={20} color="#2ECC71" />
-            <Text style={styles.progressText}>1. KVKK Onayları & Belge Yükleme</Text>
+            <Text style={styles.progressText}>{t('progress.kvkkCompleted')}</Text>
           </View>
           
           <View style={styles.progressItem}>
             <Ionicons name="checkmark-circle" size={20} color="#2ECC71" />
-            <Text style={styles.progressText}>2. Konum Tabanlı Araç Listeleme & QR Tarama</Text>
+            <Text style={styles.progressText}>{t('progress.locationCompleted')}</Text>
           </View>
           
           <View style={styles.progressItem}>
             <Ionicons name="ellipse-outline" size={20} color="#F39C12" />
-            <Text style={styles.progressTextPending}>3. Tarih/Teslimat Konumu ile Araç Seçimi</Text>
+            <Text style={styles.progressTextPending}>{t('progress.selectionPending')}</Text>
           </View>
           
           <View style={styles.progressItem}>
             <Ionicons name="ellipse-outline" size={20} color="#95A5A6" />
-            <Text style={styles.progressTextPending}>4. Müsaitlik Kontrolü & Rezervasyon</Text>
+            <Text style={styles.progressTextPending}>{t('progress.reservationPending')}</Text>
           </View>
         </View>
       </View>
 
       {/* Recent Activity */}
       <View style={styles.recentSection}>
-        <Text style={styles.sectionTitle}>Son Aktiviteler</Text>
+        <Text style={styles.sectionTitle}>{t('home.recentActivities')}</Text>
         <View style={styles.activityCard}>
-          <Text style={styles.activityText}>🚗 QR kod tarama özelliği eklendi</Text>
-          <Text style={styles.activityTime}>2 saat önce</Text>
+          <Text style={styles.activityText}>🔐 {t('activities.jwtAdded')}</Text>
+          <Text style={styles.activityTime}>{t('activities.justNow')}</Text>
         </View>
         <View style={styles.activityCard}>
-          <Text style={styles.activityText}>📍 Konum tabanlı araç arama aktif</Text>
-          <Text style={styles.activityTime}>4 saat önce</Text>
+          <Text style={styles.activityText}>🚗 {t('activities.qrAdded')}</Text>
+          <Text style={styles.activityTime}>{t('activities.hoursAgo', { hours: 2 })}</Text>
         </View>
         <View style={styles.activityCard}>
-          <Text style={styles.activityText}>📄 OCR belge doğrulama sistemi güncellendi</Text>
-          <Text style={styles.activityTime}>1 gün önce</Text>
+          <Text style={styles.activityText}>📍 {t('activities.locationSearch')}</Text>
+          <Text style={styles.activityTime}>{t('activities.hoursAgo', { hours: 4 })}</Text>
         </View>
       </View>
     </ScrollView>
@@ -631,56 +611,6 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 12,
     color: '#95A5A6',
-  },
-  notAuthenticatedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  notAuthenticatedTitle: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-    marginBottom: 8,
-    marginTop: 20,
-    textAlign: 'center',
-  },
-  notAuthenticatedSubtitle: {
-    fontSize: 16,
-    color: '#7F8C8D',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 40,
-  },
-  loginButton: {
-    backgroundColor: '#3498DB',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    width: '100%',
-    maxWidth: 300,
-  },
-  loginButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-  },
-  signupButton: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#3498DB',
-    width: '100%',
-    maxWidth: 300,
-  },
-  signupButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#3498DB',
-    textAlign: 'center',
   },
 });
 

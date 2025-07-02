@@ -9,15 +9,24 @@ import com.rentesla.mobilebackend.entity.UserConsent;
 import com.rentesla.mobilebackend.repository.UserRepository;
 import com.rentesla.mobilebackend.repository.UserConsentRepository;
 import com.rentesla.mobilebackend.service.JwtService;
+import com.rentesla.mobilebackend.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -27,6 +36,8 @@ import java.util.Optional;
 @CrossOrigin(origins = "*")
 public class AuthController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
+
     @Autowired
     private JwtService jwtService;
 
@@ -35,6 +46,12 @@ public class AuthController {
 
     @Autowired
     private UserConsentRepository userConsentRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Value("${jwt.expiration}")
     private Long jwtExpiration;
@@ -47,168 +64,39 @@ public class AuthController {
 
     @PostMapping("/signup")
     @Operation(summary = "User registration", description = "Register new user account")
-    public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest signupRequest) {
-        
-        System.out.println("🚀 Signup request received for email: " + signupRequest.getEmail());
-        
+    public ResponseEntity<Map<String, Object>> createNewUser(@Valid @RequestBody SignupRequest signupRequest) {
         try {
-            // Check if user already exists
-            Optional<User> existingUser = userRepository.findByEmail(signupRequest.getEmail());
-            if (existingUser.isPresent()) {
-                System.out.println("❌ Email already exists: " + signupRequest.getEmail());
-                return ResponseEntity.status(400).body(new ErrorResponse(
-                    "EMAIL_EXISTS", 
-                    "User with this email already exists",
-                    "email"
-                ));
-            }
+            // Hash the password
+            String hashedPassword = passwordEncoder.encode(signupRequest.getPassword());
             
-            // Validate required consents
-            Map<String, Boolean> consents = signupRequest.getConsents();
-            if (consents == null || !consents.getOrDefault("kvkk", false)) {
-                System.out.println("❌ KVKK consent missing for: " + signupRequest.getEmail());
-                return ResponseEntity.status(400).body(new ErrorResponse(
-                    "KVKK_CONSENT_REQUIRED", 
-                    "KVKK consent is required for registration",
-                    "consents.kvkk"
-                ));
-            }
-            if (!consents.getOrDefault("openConsent", false)) {
-                System.out.println("❌ Open consent missing for: " + signupRequest.getEmail());
-                return ResponseEntity.status(400).body(new ErrorResponse(
-                    "OPEN_CONSENT_REQUIRED", 
-                    "Open consent for data processing is required",
-                    "consents.openConsent"
-                ));
-            }
+            User newUser = new User();
+            newUser.setEmail(signupRequest.getEmail());
+            newUser.setFirstName(signupRequest.getFirstName());
+            newUser.setLastName(signupRequest.getLastName());
+            newUser.setIdentityNumber(signupRequest.getIdentityNumber());
+            newUser.setPassword(hashedPassword); // Save hashed password
+            newUser.setRole(User.UserRole.CUSTOMER); // Default role for new users
             
-            // Create new user
-            User newUser = createNewUser(signupRequest);
-            System.out.println("📝 Creating new user: " + newUser.getEmail());
+            User savedUser = userRepository.save(newUser);
+            logger.info("User created successfully: {}", savedUser.getEmail());
             
-            // Save user with transaction retry
-            User savedUser = saveUserWithRetry(newUser, 3);
-            System.out.println("✅ User saved with ID: " + savedUser.getId());
+            // Create response without password
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "User created successfully");
+            response.put("userId", savedUser.getId());
+            response.put("email", savedUser.getEmail());
             
-            // Save detailed consent records
-            saveUserConsents(savedUser.getId(), consents);
-            System.out.println("📋 Consents saved for user: " + savedUser.getId());
-            
-            // Generate JWT token for the new user
-            String token = jwtService.generateToken(savedUser.getEmail(), savedUser.getRole().toString());
-            
-            AuthResponse authResponse = new AuthResponse(
-                token, 
-                savedUser.getId(),
-                savedUser.getEmail(), 
-                savedUser.getRole().toString(),
-                jwtExpiration / 1000 // convert to seconds
-            );
-            
-            System.out.println("🎉 Signup successful for: " + savedUser.getEmail());
-            return ResponseEntity.ok(authResponse);
-            
-        } catch (IllegalArgumentException e) {
-            System.err.println("❌ Validation error during signup: " + e.getMessage());
-            return ResponseEntity.status(400).body(new ErrorResponse(
-                "VALIDATION_ERROR", 
-                e.getMessage(),
-                null
-            ));
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (DataIntegrityViolationException e) {
+            logger.warn("User creation failed - email already exists: {}", signupRequest.getEmail());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Email already exists");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
         } catch (Exception e) {
-            System.err.println("❌ Signup error: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(new ErrorResponse(
-                "INTERNAL_ERROR", 
-                "Registration failed due to server error. Please try again.",
-                null
-            ));
-        }
-    }
-
-    private User createNewUser(SignupRequest signupRequest) {
-        User newUser = new User();
-        newUser.setEmail(signupRequest.getEmail());
-        newUser.setFirstName(signupRequest.getFirstName());
-        newUser.setLastName(signupRequest.getLastName());
-        newUser.setPhone(signupRequest.getPhoneNumber());
-        newUser.setRole(User.UserRole.CUSTOMER);
-        newUser.setIsActive(true);
-        newUser.setDocumentVerified(false);
-        
-        // Set consents based on signup data
-        Map<String, Boolean> consents = signupRequest.getConsents();
-        if (consents != null) {
-            newUser.setKvkkConsentGiven(consents.getOrDefault("kvkk", false));
-            newUser.setOpenConsentGiven(consents.getOrDefault("openConsent", false));
-        } else {
-            newUser.setKvkkConsentGiven(false);
-            newUser.setOpenConsentGiven(false);
-        }
-        
-        return newUser;
-    }
-    
-    private User saveUserWithRetry(User user, int maxRetries) {
-        int attempts = 0;
-        while (attempts < maxRetries) {
-            try {
-                return userRepository.save(user);
-            } catch (Exception e) {
-                attempts++;
-                if (attempts >= maxRetries) {
-                    throw new RuntimeException("Failed to save user after " + maxRetries + " attempts", e);
-                }
-                
-                // Wait before retry
-                try {
-                    Thread.sleep(100 * attempts); // Exponential backoff
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException("Interrupted during user save retry", ie);
-                }
-            }
-        }
-        throw new RuntimeException("Unexpected error in saveUserWithRetry");
-    }
-
-    private void saveUserConsents(Long userId, Map<String, Boolean> consents) {
-        if (consents == null) {
-            return;
-        }
-        
-        try {
-            LocalDateTime now = LocalDateTime.now();
-            
-            // Map frontend consent keys to backend consent types
-            Map<String, UserConsent.ConsentType> consentMapping = Map.of(
-                "kvkk", UserConsent.ConsentType.KVKK,
-                "openConsent", UserConsent.ConsentType.OPEN_CONSENT,
-                "location", UserConsent.ConsentType.LOCATION,
-                "notification", UserConsent.ConsentType.NOTIFICATION,
-                "marketing", UserConsent.ConsentType.MARKETING
-            );
-            
-            for (Map.Entry<String, Boolean> entry : consents.entrySet()) {
-                String consentKey = entry.getKey();
-                Boolean consentValue = entry.getValue();
-                
-                UserConsent.ConsentType consentType = consentMapping.get(consentKey);
-                if (consentType != null && consentValue != null && consentValue) {
-                    UserConsent userConsent = new UserConsent();
-                    userConsent.setUserId(userId);
-                    userConsent.setConsentType(consentType);
-                    userConsent.setStatus(UserConsent.ConsentStatus.GIVEN);
-                    userConsent.setGivenAt(now);
-                    userConsent.setConsentText("User consent given during registration via mobile app");
-                    userConsent.setVersion("1.0");
-                    
-                    userConsentRepository.save(userConsent);
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Error saving user consents: " + e.getMessage());
-            // Don't fail the signup if consent saving fails
+            logger.error("User creation failed: {}", e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "User creation failed: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
@@ -218,17 +106,21 @@ public class AuthController {
         
         try {
             // Demo admin login (remove in production)
-            if (demoAdminUsername.equals(authRequest.getUsername()) && demoAdminPassword.equals(authRequest.getPassword())) {
-                // Create demo admin JWT token
-                String token = jwtService.generateToken(authRequest.getUsername(), "ADMIN");
-                
-                return ResponseEntity.ok(new AuthResponse(
-                    token, 
-                    1L, // Admin user ID
-                    authRequest.getUsername(), 
-                    "ADMIN",
-                    jwtExpiration / 1000 // convert to seconds
-                ));
+            if (demoAdminUsername.equals(authRequest.getUsername())) {
+                // For demo admin, check plain text password temporarily 
+                // TODO: Hash admin password and store in config or database
+                if (demoAdminPassword.equals(authRequest.getPassword())) {
+                    // Create demo admin JWT token
+                    String token = jwtService.generateToken(authRequest.getUsername(), "ADMIN");
+                    
+                    return ResponseEntity.ok(new AuthResponse(
+                        token, 
+                        1L, // Admin user ID
+                        authRequest.getUsername(), 
+                        "ADMIN",
+                        jwtExpiration / 1000 // convert to seconds
+                    ));
+                }
             }
             
             // Check database users
@@ -245,9 +137,8 @@ public class AuthController {
                     ));
                 }
                 
-                // For demo purposes, we'll use simple password check
-                // In production, use BCrypt or similar
-                if ("password123".equals(authRequest.getPassword())) {
+                // Check actual password from database using BCrypt
+                if (user.getPassword() != null && passwordEncoder.matches(authRequest.getPassword(), user.getPassword())) {
                     String token = jwtService.generateToken(user.getEmail(), user.getRole().toString());
                     
                     AuthResponse authResponse = new AuthResponse(
@@ -345,6 +236,153 @@ public class AuthController {
             }
         } catch (Exception e) {
             return ResponseEntity.status(401).body("Token validation failed");
+        }
+    }
+
+    @PostMapping("/fcm/token")
+    public ResponseEntity<Map<String, Object>> updateFCMToken(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody Map<String, String> request) {
+        try {
+            // Extract JWT token from Authorization header
+            String token = authHeader.substring(7); // Remove "Bearer " prefix
+            String email = jwtService.extractUsername(token);
+            
+            User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            String fcmToken = request.get("fcmToken");
+            if (fcmToken == null || fcmToken.trim().isEmpty()) {
+                throw new IllegalArgumentException("FCM token cannot be empty");
+            }
+            
+            // Update FCM token via notification service
+            notificationService.updateUserFCMToken(user.getId(), fcmToken);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "FCM token updated successfully");
+            
+            logger.info("FCM token updated for user: {}", user.getEmail());
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            logger.error("Failed to update FCM token: {}", e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "Failed to update FCM token: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+    
+    @DeleteMapping("/fcm/token")
+    public ResponseEntity<Map<String, Object>> removeFCMToken(
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            // Extract JWT token from Authorization header
+            String token = authHeader.substring(7); // Remove "Bearer " prefix
+            String email = jwtService.extractUsername(token);
+            
+            User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            // Remove FCM token via notification service
+            notificationService.removeUserFCMToken(user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "FCM token removed successfully");
+            
+            logger.info("FCM token removed for user: {}", user.getEmail());
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            logger.error("Failed to remove FCM token: {}", e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "Failed to remove FCM token: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    @PostMapping("/refresh")
+    @Operation(summary = "Refresh JWT token", description = "Get a new JWT token using an existing valid token")
+    public ResponseEntity<?> refreshToken(@RequestHeader("Authorization") String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body(new ErrorResponse(
+                "INVALID_HEADER",
+                "Invalid authorization header",
+                "header"
+            ));
+        }
+
+        String token = authHeader.substring(7);
+
+        try {
+            // Validate existing token
+            if (!jwtService.isTokenValid(token)) {
+                return ResponseEntity.status(401).body(new ErrorResponse(
+                    "INVALID_TOKEN",
+                    "Token is invalid or expired",
+                    "token"
+                ));
+            }
+
+            // Extract user info from existing token
+            String username = jwtService.extractUsername(token);
+            String role = jwtService.extractRole(token);
+
+            // For admin user
+            if ("admin".equals(username)) {
+                String newToken = jwtService.generateToken(username, "ADMIN");
+                return ResponseEntity.ok(new AuthResponse(
+                    newToken,
+                    1L,
+                    username,
+                    "ADMIN",
+                    jwtExpiration / 1000
+                ));
+            }
+
+            // For regular users
+            Optional<User> userOptional = userRepository.findByEmail(username);
+            if (userOptional.isPresent()) {
+                User user = userOptional.get();
+                
+                // Check if user is still active
+                if (!user.getIsActive()) {
+                    return ResponseEntity.status(401).body(new ErrorResponse(
+                        "ACCOUNT_DISABLED",
+                        "Your account has been disabled",
+                        "account"
+                    ));
+                }
+
+                // Generate new token
+                String newToken = jwtService.generateToken(username, role);
+                
+                return ResponseEntity.ok(new AuthResponse(
+                    newToken,
+                    user.getId(),
+                    username,
+                    role,
+                    jwtExpiration / 1000
+                ));
+            }
+
+            return ResponseEntity.status(404).body(new ErrorResponse(
+                "USER_NOT_FOUND",
+                "User not found",
+                "user"
+            ));
+
+        } catch (Exception e) {
+            logger.error("Token refresh failed: {}", e.getMessage());
+            return ResponseEntity.status(500).body(new ErrorResponse(
+                "REFRESH_FAILED",
+                "Failed to refresh token: " + e.getMessage(),
+                null
+            ));
         }
     }
 } 
