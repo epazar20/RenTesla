@@ -96,4 +96,11 @@ application-local.properties
 
 # Backup files
 *.bak
-*.backup 
+*.backup
+
+# Google Cloud ve Firebase secret dosyaları
+src/main/resources/*.json
+src/main/resources/firebase-cloud-message/*.json
+src/main/resources/vision/*.json
+src/main/resources/*.pem
+src/main/resources/*.p12 
